@@ -5,14 +5,17 @@ import { getLocales } from 'expo-localization'
 import { useSettings, type Language } from '@/store/settings'
 
 import { tr } from './tr'
+import { zh } from './zh'
 
 // English source strings are the keys; a missing translation falls back to English.
-const catalogs: Record<Exclude<Language, 'system'>, Record<string, string> | null> = { en: null, tr }
+const catalogs: Record<Exclude<Language, 'system'>, Record<string, string> | null> = { en: null, tr, zh }
 
 export function resolveLanguage(lang: Language): Exclude<Language, 'system'> {
   if (lang !== 'system') return lang
   const code = getLocales()[0]?.languageCode ?? 'en'
-  return code === 'tr' ? 'tr' : 'en'
+  if (code === 'tr') return 'tr'
+  if (code === 'zh') return 'zh'
+  return 'en'
 }
 
 function format(template: string, vars?: Record<string, string | number>) {

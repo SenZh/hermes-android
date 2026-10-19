@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware'
 import { persistStorage } from '@/lib/storage'
 
 export type ThemeMode = 'system' | 'dark' | 'light'
-export type Language = 'system' | 'en' | 'tr'
+export type Language = 'system' | 'en' | 'tr' | 'zh'
 
 export interface Settings {
   themeMode: ThemeMode

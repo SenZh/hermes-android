@@ -68,7 +68,7 @@ function speakOnDevice(text: string) {
   const lang = resolveLanguage(useSettings.getState().language)
   speaking = true
   Speech.speak(text, {
-    language: lang === 'tr' ? 'tr-TR' : 'en-US',
+    language: lang === 'tr' ? 'tr-TR' : lang === 'zh' ? 'zh-CN' : 'en-US',
     onDone: () => {
       speaking = false
     },

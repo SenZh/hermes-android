@@ -4,7 +4,7 @@
 
 A native Android app for [Hermes Agent](https://github.com/NousResearch/hermes-agent), the self-improving AI agent by Nous Research. It is a full remote control for a Hermes backend: chat with live tool output, approve commands, manage skills, memory, models, MCP servers, scheduled jobs, messaging platforms, files and the rest of the agent from your phone.
 
-Built with React Native (Expo SDK 57). English and Turkish UI.
+Built with React Native (Expo SDK 57). English, Turkish and Simplified Chinese UI.
 
 **[Download the latest APK](https://github.com/azygoss/hermes-android/releases/latest)** (`-arm64` is smaller and fits almost every phone from the last years; the plain one also runs on older 32-bit devices)
 

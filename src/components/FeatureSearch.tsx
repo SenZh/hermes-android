@@ -324,7 +324,7 @@ function features(t: ReturnType<typeof useT>): Feature[] {
       title: t('App language'),
       subtitle: t('Settings'),
       route: '/settings',
-      keywords: 'language turkish english',
+      keywords: 'language turkish english chinese 语言 中文',
     },
     {
       hub: more,
