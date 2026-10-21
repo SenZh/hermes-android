@@ -6,6 +6,15 @@ A native Android app for [Hermes Agent](https://github.com/NousResearch/hermes-a
 
 Built with React Native (Expo SDK 57). English and Turkish UI.
 
+
+### 📥 中文版下载 (Download APK)
+
+- **[直接下载最新中文版 (arm64 推荐)](https://github.com/SenZh/hermes-android/releases/latest/download/hermes-android-1.8.0-zh-arm64.apk)**（适配近几年绝大多数主流安卓手机）
+- **[下载通用兼容版 APK](https://github.com/SenZh/hermes-android/releases/latest/download/hermes-android-v1.8.0-zh.apk)**（老款手机或 32 位设备）
+- **[查看所有版本发布页 (All Releases)](https://github.com/SenZh/hermes-android/releases/latest)**
+
+*(上游英文原版仓库：[azygoss/hermes-android](https://github.com/azygoss/hermes-android))*
+
 **[Download the latest APK](https://github.com/azygoss/hermes-android/releases/latest)** (`-arm64` is smaller and fits almost every phone from the last years; the plain one also runs on older 32-bit devices)
 
 <p>
