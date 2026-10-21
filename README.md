@@ -15,8 +15,6 @@ Built with React Native (Expo SDK 57). English and Turkish UI.
 
 *(上游英文原版仓库：[azygoss/hermes-android](https://github.com/azygoss/hermes-android))*
 
-**[Download the latest APK](https://github.com/azygoss/hermes-android/releases/latest)** (`-arm64` is smaller and fits almost every phone from the last years; the plain one also runs on older 32-bit devices)
-
 <p>
   <img src="docs/screenshots/chat-markdown.png" width="200" alt="Streaming chat with markdown">
   <img src="docs/screenshots/approval.png" width="200" alt="Approving a command">
