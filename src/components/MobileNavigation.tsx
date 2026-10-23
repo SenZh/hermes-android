@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useRef, type ReactNode } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import ReanimatedDrawerLayout, {
   DrawerKeyboardDismissMode,
@@ -20,9 +20,8 @@ export function MobileNavigation({ children }: { children: ReactNode }) {
   const { c } = useTheme()
   const { width } = useWindowDimensions()
   const drawerRef = useRef<DrawerLayoutMethods>(null)
-  const [opened, setOpened] = useState(false)
-  const open = useCallback(() => drawerRef.current?.openDrawer(), [])
-  const close = useCallback(() => drawerRef.current?.closeDrawer(), [])
+  const open = useCallback(() => drawerRef.current?.openDrawer({ animationSpeed: 0.6 }), [])
+  const close = useCallback(() => drawerRef.current?.closeDrawer({ animationSpeed: 0.6 }), [])
 
   return (
     <NavigationContext.Provider value={open}>
@@ -31,12 +30,12 @@ export function MobileNavigation({ children }: { children: ReactNode }) {
         drawerWidth={Math.min(width * 0.84, 340)}
         drawerPosition={DrawerPosition.LEFT}
         drawerType={DrawerType.FRONT}
-        edgeWidth={24}
+        drawerBackgroundColor={c.surface}
+        animationSpeed={0.6}
+        edgeWidth={32}
         overlayColor={c.overlay}
         keyboardDismissMode={DrawerKeyboardDismissMode.ON_DRAG}
-        onDrawerOpen={() => setOpened(true)}
-        onDrawerClose={() => setOpened(false)}
-        renderNavigationView={() => (opened ? <ChatDrawer onClose={close} /> : null)}
+        renderNavigationView={() => <ChatDrawer onClose={close} />}
       >
         <View style={{ flex: 1 }}>{children}</View>
       </ReanimatedDrawerLayout>
