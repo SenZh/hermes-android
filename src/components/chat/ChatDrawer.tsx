@@ -222,8 +222,6 @@ export function ChatDrawer({ onClose }: { onClose: () => void }) {
               router.navigate('/agent')
             }}
           />
-        </View>
-        <View style={styles.navRow}>
           <DrawerNavItem
             icon={CalendarClock}
             label={t('Automate')}
@@ -233,8 +231,8 @@ export function ChatDrawer({ onClose }: { onClose: () => void }) {
             }}
           />
           <DrawerNavItem
-            icon={LayoutGrid}
-            label={t('More')}
+            icon={Settings2}
+            label={t('Settings')}
             onPress={() => {
               onClose()
               router.navigate('/more')
@@ -338,11 +336,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   footer: {
-    gap: space.xxs,
-    paddingHorizontal: space.sm,
-    paddingTop: space.sm,
+    paddingHorizontal: space.xs,
+    paddingTop: space.xs + 2,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  navRow: { flexDirection: 'row', gap: space.xs },
-  navItem: { flex: 1, minWidth: 0, minHeight: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  navRow: { flexDirection: 'row', gap: 2 },
+  navItem: { flex: 1, minWidth: 0, minHeight: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 2 },
 })
