@@ -613,9 +613,20 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   const currentApproval = approvalConfig[approvalMode] ?? approvalConfig.manual
 
   return (
-    <>
-      <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
-      <Pill icon={Brain} label={effortLabel} onPress={onReasoning} />
+    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}
+        style={{ flex: 1, marginRight: space.xs }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
+        <Pill icon={Brain} label={effortLabel} onPress={onReasoning} />
+        {runtimeId && subagents ? (
+          <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />
+        ) : null}
+      </ScrollView>
       <Pill
         icon={currentApproval.icon}
         label={currentApproval.label}
@@ -624,10 +635,7 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
         noChevron
         onPress={cycleApprovalMode}
       />
-      {runtimeId && subagents ? (
-        <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />
-      ) : null}
-    </>
+    </View>
   )
 }
 

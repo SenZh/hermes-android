@@ -455,19 +455,7 @@ export const Composer = memo(function Composer(props: Props) {
             </Pressable>
           )}
         </View>
-        {pills ? (
-          <View style={styles.pillsRow}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ flex: 1 }}
-              contentContainerStyle={styles.pills}
-              keyboardShouldPersistTaps="handled"
-            >
-              {pills}
-            </ScrollView>
-          </View>
-        ) : null}
+        {pills ? <View style={styles.pillsRow}>{pills}</View> : null}
       </View>
 
       <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title={t('Add to message')}>
@@ -596,7 +584,14 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: space.xs,
   },
-  pillsRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 2, paddingBottom: 2, paddingLeft: space.xs },
+  pillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 2,
+    paddingBottom: 2,
+    paddingHorizontal: space.xs,
+  },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   optionRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.xs },
   action: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },

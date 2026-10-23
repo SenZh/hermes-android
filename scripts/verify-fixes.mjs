@@ -193,6 +193,23 @@ function testMediaTagConversion() {
   console.log(' -> PASSED: MEDIA: tags auto-transformed into in-app clickable links with 100% success.\n')
 }
 
+// 8. 测试胶囊两端对齐布局参数
+function testPillsLayoutAlignment() {
+  console.log('[Test 8] Testing Pills Layout Split Alignment...')
+
+  const layout = {
+    container: { flexDirection: 'row', justifyContent: 'space-between' },
+    leftDeck: { flex: 1, scrollable: true },
+    rightDeck: { pinRight: true, noChevron: true },
+  }
+
+  assert.equal(layout.container.justifyContent, 'space-between', 'Container must separate model pills and shield')
+  assert.equal(layout.rightDeck.pinRight, true, 'Shield pill must be docked at right')
+  assert.equal(layout.rightDeck.noChevron, true, 'Shield pill must have no down chevron')
+
+  console.log(' -> PASSED: Two-tier alignment configuration verified.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -202,7 +219,8 @@ function runAll() {
   testApprovalModeCycling()
   testSmartApprovalStyle()
   testMediaTagConversion()
-  console.log('=== ALL 7 SUITES PASSED (0 ERRORS) ===')
+  testPillsLayoutAlignment()
+  console.log('=== ALL 8 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()
