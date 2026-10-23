@@ -102,7 +102,11 @@ export function ModelPicker({ visible, onClose, sessionId, currentModel, current
   const query = useQuery({
     queryKey: ['model.options', sessionId],
     enabled: visible,
-    queryFn: () => rpc().request('model.options', { session_id: sessionId ?? undefined }) as Promise<ModelOptionsResult>,
+    queryFn: () =>
+      rpc().request('model.options', {
+        session_id: sessionId ?? undefined,
+        explicit_only: true,
+      }) as Promise<ModelOptionsResult>,
   })
 
   const rows = useMemo(() => {

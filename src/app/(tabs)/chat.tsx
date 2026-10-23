@@ -11,9 +11,9 @@ import {
   Search,
   WifiOff,
   X,
+  type LucideIcon,
 } from '@/components/icons'
-import type { LucideIcon } from '@/components/icons'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native'
 import ReanimatedDrawerLayout, {
   DrawerKeyboardDismissMode,
@@ -562,10 +562,22 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   const subagents = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.subagents : undefined))
   const live = !!runtimeId
   const fallback = useRest<{ model?: string }>(['model-info'], '/api/model/info', undefined, { enabled: !live })
+
+  const effortLabels: Record<string, string> = {
+    none: t('Off'),
+    minimal: t('Minimal'),
+    low: t('Low'),
+    medium: t('Medium'),
+    high: t('High'),
+    xhigh: t('Extra high'),
+    max: t('Max'),
+  }
+  const effortLabel = effort ? (effortLabels[effort] ?? effort) : t('default')
+
   return (
     <>
       <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
-      <Pill icon={Brain} label={String(effort || t('default'))} onPress={onReasoning} />
+      <Pill icon={Brain} label={effortLabel} onPress={onReasoning} />
       {yolo ? <Pill label="YOLO" tone="danger" onPress={onMenu} /> : null}
       {runtimeId && subagents ? (
         <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />

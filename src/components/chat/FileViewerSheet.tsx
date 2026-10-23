@@ -25,12 +25,15 @@ export function FileViewerSheet() {
   const filePath = useChat((s) => s.viewingFilePath)
   const onClose = () => openFileViewer(null)
 
+  const isOutsideManaged = filePath ? !filePath.startsWith('/opt/data') && filePath.startsWith('/') : false
+  const safePath = isOutsideManaged ? null : filePath
+
   const fileName = filePath ? filePath.split('/').pop() || filePath : ''
   const q = useRest<{ data_url: string; mime_type: string; size?: number }>(
-    ['file-read', filePath],
+    ['file-read', safePath],
     '/api/files/read',
-    { path: filePath ?? '' },
-    { enabled: !!filePath },
+    { path: safePath ?? '' },
+    { enabled: !!safePath },
   )
 
   const mime = q.data?.mime_type ?? ''
@@ -88,6 +91,18 @@ export function FileViewerSheet() {
       <Text variant="caption" tone="faint" mono selectable style={{ marginBottom: space.xs }}>
         {filePath} {q.data?.size ? `· ${bytes(q.data.size)}` : ''}
       </Text>
+      {isOutsideManaged ? (
+        <View style={{ padding: space.md, borderRadius: radius.md, backgroundColor: c.surfaceAlt, gap: space.xs }}>
+          <Text weight="semibold" tone="warn">
+            {t('System path outside managed workspace')}
+          </Text>
+          <Text variant="small" tone="muted">
+            {t(
+              'This path is outside the safe file root (/opt/data). For security reasons, the server only allows viewing and downloading files within the workspace.',
+            )}
+          </Text>
+        </View>
+      ) : null}
       {q.isLoading ? <Loading /> : null}
       {q.error ? <ErrorState error={q.error} /> : null}
       {mime.startsWith('image/') && q.data ? (

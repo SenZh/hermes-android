@@ -36,16 +36,18 @@ export function ModelChooser({
   const opts = useQuery({
     queryKey: ['model-options-rest'],
     enabled: visible,
-    queryFn: () => rest().get<{ providers: ProviderRow[] }>('/api/model/options'),
+    queryFn: () => rest().get<{ providers: ProviderRow[] }>('/api/model/options', { query: { explicit_only: '1' } }),
   })
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
     const out: { key: string; header?: string; provider?: string; model?: string; authed?: boolean }[] = []
-    for (const p of opts.data?.providers ?? []) {
+    // Filter to only authenticated providers with models available
+    const providers = (opts.data?.providers ?? []).filter((p) => p.authenticated !== false)
+    for (const p of providers) {
       const ms = p.models.filter((m) => !needle || m.toLowerCase().includes(needle) || p.name.toLowerCase().includes(needle))
       if (!ms.length) continue
-      out.push({ key: `h-${p.slug}`, header: p.name, authed: p.authenticated !== false })
-      for (const m of ms) out.push({ key: `${p.slug}/${m}`, provider: p.slug, model: m, authed: p.authenticated !== false })
+      out.push({ key: `h-${p.slug}`, header: p.name, authed: true })
+      for (const m of ms) out.push({ key: `${p.slug}/${m}`, provider: p.slug, model: m, authed: true })
     }
     return out
   }, [opts.data, q])

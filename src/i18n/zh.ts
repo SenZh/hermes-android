@@ -1027,6 +1027,9 @@ export const zh: Record<string, string> = {
   'Switch profile': '切换配置档',
   'Switched to profile {name}': '已切换到配置档 {name}',
   System: '系统',
+  'System path outside managed workspace': '系统受限路径（超出受管工作区）',
+  'This path is outside the safe file root (/opt/data). For security reasons, the server only allows viewing and downloading files within the workspace.':
+    '此文件位于安全根目录（/opt/data）之外。出于安全考虑，系统仅允许预览和下载受管工作区内的文件。',
   'Take a photo': '拍照',
   'Tap the button, then press Start in Telegram. BotFather creates the bot and hands it to Hermes.':
     '点击按钮，然后在 Telegram 中按开始。BotFather 会创建机器人并将其交给 Hermes。',

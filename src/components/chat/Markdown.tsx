@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard'
 import * as WebBrowser from 'expo-web-browser'
 import { Check, Copy } from '@/components/icons'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text as RNText, View, type TextStyle, type ViewStyle } from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, Text as RNText, View, type TextStyle, type ViewStyle } from 'react-native'
 import { Renderer, useMarkdown } from 'react-native-marked'
 
 import { Text } from '@/components/ui'
@@ -91,7 +91,7 @@ const CodeBlock = memo(function CodeBlock({ code, language, c, isDark }: { code:
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: space.md }}>
-        <RNText selectable style={{ fontFamily: font.mono, fontSize: 13, lineHeight: 19, color: c.text }}>
+        <RNText selectable={Platform.OS !== 'android'} style={{ fontFamily: font.mono, fontSize: 13, lineHeight: 19, color: c.text }}>
           {tokens
             ? tokens.map((tok, i) => (
                 <RNText key={i} style={tokenStyle(tok.scope, isDark, c)}>
@@ -110,7 +110,9 @@ class HermesRenderer extends Renderer {
     private readonly c: Palette,
     private readonly isDark: boolean,
   ) {
-    super({ selectable: true })
+    // Android Inverted FlatList bug: selectable=true in inverted lists causes Android TextView
+    // to call requestRectangleOnScreen with inverted coordinates on text selection, jumping to start.
+    super({ selectable: Platform.OS !== 'android' })
   }
 
   // Header cells read as body text otherwise; the library's own table already scrolls wide
