@@ -378,7 +378,7 @@ export default function ChatScreen() {
         </View>
       ) : (
         <View style={[styles.header, styles.compactHeader, { borderBottomColor: c.border }]}>
-          <IconButton icon={PanelLeft} size={18} label={t('Chats, profiles and backends')} onPress={openDrawer} />
+          <IconButton icon={PanelLeft} size={18} label={t('Chats, profiles and backends')} onPress={openDrawer} style={{ marginLeft: 4 }} />
           <View style={{ flex: 1, minHeight: 36, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Pressable
               accessibilityRole="button"

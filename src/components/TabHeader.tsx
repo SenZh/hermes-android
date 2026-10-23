@@ -17,16 +17,16 @@ export function TabHeader({ title, subtitle, right }: { title: string; subtitle?
     <View
       style={{
         paddingTop: insets.top + space.xs,
-        paddingHorizontal: space.md,
+        paddingHorizontal: space.sm,
         paddingBottom: space.xs,
-        minHeight: 48,
+        minHeight: 40,
         backgroundColor: c.bg,
         flexDirection: 'row',
         alignItems: 'center',
         gap: space.xs,
       }}
     >
-      <IconButton icon={PanelLeft} label={t('Open navigation')} onPress={() => openNavigationDrawer?.()} />
+      <IconButton icon={PanelLeft} size={18} label={t('Open navigation')} onPress={() => openNavigationDrawer?.()} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text variant="title" accessibilityRole="header" numberOfLines={1}>
           {title}

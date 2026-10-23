@@ -20,8 +20,12 @@ export function MobileNavigation({ children }: { children: ReactNode }) {
   const { c } = useTheme()
   const { width } = useWindowDimensions()
   const drawerRef = useRef<DrawerLayoutMethods>(null)
-  const open = useCallback(() => drawerRef.current?.openDrawer({ animationSpeed: 0.6 }), [])
-  const close = useCallback(() => drawerRef.current?.closeDrawer({ animationSpeed: 0.6 }), [])
+  const open = useCallback(() => {
+    drawerRef.current?.openDrawer()
+  }, [])
+  const close = useCallback(() => {
+    drawerRef.current?.closeDrawer()
+  }, [])
 
   return (
     <NavigationContext.Provider value={open}>
@@ -32,7 +36,7 @@ export function MobileNavigation({ children }: { children: ReactNode }) {
         drawerType={DrawerType.FRONT}
         drawerBackgroundColor={c.surface}
         animationSpeed={0.6}
-        edgeWidth={32}
+        edgeWidth={18}
         overlayColor={c.overlay}
         keyboardDismissMode={DrawerKeyboardDismissMode.ON_DRAG}
         renderNavigationView={() => <ChatDrawer onClose={close} />}
