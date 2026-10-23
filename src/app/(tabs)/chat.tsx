@@ -604,18 +604,26 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
     }
   }
 
-  const approvalConfig: Record<string, { icon: LucideIcon; label: string; tone?: 'danger'; color?: string }> = {
-    manual: { icon: ShieldCheck, label: t('Manual') },
-    smart: { icon: ShieldAlert, label: t('Smart') },
-    off: { icon: ShieldOff, label: t('Off'), tone: 'danger' },
-  }
+  const approvalConfig: Record<string, { icon: LucideIcon; label: string; tone?: 'danger' | 'success' | 'warn'; colorOverride?: string }> =
+    {
+      manual: { icon: ShieldCheck, label: t('Manual') },
+      smart: { icon: ShieldAlert, label: t('Smart'), tone: 'success' },
+      off: { icon: ShieldOff, label: t('Off'), tone: 'danger' },
+    }
   const currentApproval = approvalConfig[approvalMode] ?? approvalConfig.manual
 
   return (
     <>
       <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
       <Pill icon={Brain} label={effortLabel} onPress={onReasoning} />
-      <Pill icon={currentApproval.icon} label={currentApproval.label} tone={currentApproval.tone} onPress={cycleApprovalMode} />
+      <Pill
+        icon={currentApproval.icon}
+        label={currentApproval.label}
+        tone={currentApproval.tone}
+        colorOverride={currentApproval.colorOverride}
+        noChevron
+        onPress={cycleApprovalMode}
+      />
       {runtimeId && subagents ? (
         <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />
       ) : null}
@@ -623,22 +631,41 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   )
 }
 
-function Pill({ label, onPress, tone, icon: Icon }: { label: string; onPress: () => void; tone?: 'danger'; icon?: LucideIcon }) {
+function Pill({
+  label,
+  onPress,
+  tone,
+  colorOverride,
+  noChevron,
+  icon: Icon,
+}: {
+  label: string
+  onPress: () => void
+  tone?: 'danger' | 'success' | 'warn'
+  colorOverride?: string
+  noChevron?: boolean
+  icon?: LucideIcon
+}) {
   const { c } = useTheme()
-  const color = tone === 'danger' ? c.danger : c.textMuted
+  const color = colorOverride || (tone === 'danger' ? c.danger : tone === 'success' ? c.success : tone === 'warn' ? c.warn : c.textMuted)
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       hitSlop={7}
-      style={({ pressed }) => [styles.pill, { backgroundColor: pressed ? c.surfaceAlt : tone === 'danger' ? c.dangerSoft : 'transparent' }]}
+      style={({ pressed }) => [
+        styles.pill,
+        {
+          backgroundColor: pressed ? c.surfaceAlt : tone === 'danger' ? c.dangerSoft : tone === 'success' ? c.successSoft : 'transparent',
+        },
+      ]}
     >
       {Icon ? <Icon size={14} color={color} strokeWidth={1.75} /> : null}
       <Text variant="small" weight="medium" numberOfLines={1} style={{ maxWidth: 170, color }}>
         {label}
       </Text>
-      <ChevronDown size={13} color={c.textFaint} strokeWidth={1.75} />
+      {!noChevron ? <ChevronDown size={13} color={c.textFaint} strokeWidth={1.75} /> : null}
     </Pressable>
   )
 }

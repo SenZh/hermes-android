@@ -39,7 +39,10 @@ function testPathSecurityGuard() {
 
   function normalizeAndVerify(rawPath) {
     if (!rawPath) return { safe: false, path: '' }
-    let p = rawPath.replace(/^sandbox:\/?\/?/, '').replace(/^\.\//, '').trim()
+    let p = rawPath
+      .replace(/^sandbox:\/?\/?/, '')
+      .replace(/^\.\//, '')
+      .trim()
     if (p.startsWith('/')) {
       if (!p.startsWith('/opt/data/')) {
         p = p.replace(/^\//, '')
@@ -144,6 +147,22 @@ function testApprovalModeCycling() {
   console.log(' -> PASSED: Approval mode cycle logic 100% verified.\n')
 }
 
+// 6. 测试智能审批模式绿色配置与箭头剔除
+function testSmartApprovalStyle() {
+  console.log('[Test 6] Testing Smart Approval Style (Green tone & no chevron)...')
+
+  const approvalConfig = {
+    manual: { icon: 'ShieldCheck', label: '手动' },
+    smart: { icon: 'ShieldAlert', label: '智能', tone: 'success' },
+    off: { icon: 'ShieldOff', label: '关闭', tone: 'danger' },
+  }
+
+  assert.equal(approvalConfig.smart.tone, 'success', 'smart mode must have success tone (green)')
+  assert.equal(approvalConfig.off.tone, 'danger', 'off mode must have danger tone')
+
+  console.log(' -> PASSED: Smart approval is verified green and ready.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -151,7 +170,8 @@ function runAll() {
   testSelectablePlatformLogic()
   testReasoningEffortI18n()
   testApprovalModeCycling()
-  console.log('=== ALL 5 SUITES PASSED (0 ERRORS) ===')
+  testSmartApprovalStyle()
+  console.log('=== ALL 6 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

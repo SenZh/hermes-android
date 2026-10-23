@@ -92,7 +92,7 @@ const CodeBlock = memo(function CodeBlock({ code, language, c, isDark }: { code:
         </Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: space.md }}>
-        <RNText selectable={Platform.OS !== 'android'} style={{ fontFamily: font.mono, fontSize: 13, lineHeight: 19, color: c.text }}>
+        <RNText selectable style={{ fontFamily: font.mono, fontSize: 13, lineHeight: 19, color: c.text }}>
           {tokens
             ? tokens.map((tok, i) => (
                 <RNText key={i} style={tokenStyle(tok.scope, isDark, c)}>
@@ -111,9 +111,8 @@ class HermesRenderer extends Renderer {
     private readonly c: Palette,
     private readonly isDark: boolean,
   ) {
-    // Android Inverted FlatList bug: selectable=true in inverted lists causes Android TextView
-    // to call requestRectangleOnScreen with inverted coordinates on text selection, jumping to start.
-    super({ selectable: Platform.OS !== 'android' })
+    // Enable selectable for fine-grained native text selection
+    super({ selectable: true })
   }
 
   // Header cells read as body text otherwise; the library's own table already scrolls wide
@@ -126,7 +125,19 @@ class HermesRenderer extends Renderer {
         </RNText>
       )),
     )
-    return super.table(bold, rows, tableStyle, rowStyle, cellStyle)
+    // Wrap in an isolated horizontal ScrollView to ensure independent scrollability
+    return (
+      <ScrollView
+        key={this.getKey()}
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        contentContainerStyle={{ minWidth: '100%' }}
+        style={{ marginVertical: space.xs }}
+      >
+        {super.table(bold, rows, tableStyle, rowStyle, cellStyle)}
+      </ScrollView>
+    )
   }
 
   code(text: string, language?: string, _container?: ViewStyle, _textStyle?: TextStyle): ReactNode {
@@ -220,37 +231,14 @@ export const Markdown = memo(function Markdown({ text, muted, small, live }: Mar
   const { c, isDark } = useTheme()
   const renderer = useMemo(() => new HermesRenderer(c, isDark), [c, isDark])
   const blocks = useMemo(() => splitBlocks(text), [text])
-  if (blocks.length === 1)
-    return (
-      <Pressable
-        accessibilityRole="text"
-        delayLongPress={350}
-        onLongPress={async () => {
-          haptic('light')
-          await Clipboard.setStringAsync(text)
-          toast(t('Copied text'), 'success')
-        }}
-      >
-        <Block text={blocks[0]} muted={muted} small={small} live={live} renderer={renderer} />
-      </Pressable>
-    )
+  if (blocks.length === 1) return <Block text={blocks[0]} muted={muted} small={small} live={live} renderer={renderer} />
   return (
-    <Pressable
-      accessibilityRole="text"
-      delayLongPress={350}
-      onLongPress={async () => {
-        haptic('light')
-        await Clipboard.setStringAsync(text)
-        toast(t('Copied text'), 'success')
-      }}
-    >
-      <View style={{ gap: 2 }}>
-        {blocks.map((block, i) => (
-          // Finished blocks keep their text, so the memo skips them while the last one streams.
-          <Block key={i} text={block} muted={muted} small={small} live={live && i === blocks.length - 1} renderer={renderer} />
-        ))}
-      </View>
-    </Pressable>
+    <View style={{ gap: 2 }}>
+      {blocks.map((block, i) => (
+        // Finished blocks keep their text, so the memo skips them while the last one streams.
+        <Block key={i} text={block} muted={muted} small={small} live={live && i === blocks.length - 1} renderer={renderer} />
+      ))}
+    </View>
   )
 })
 
