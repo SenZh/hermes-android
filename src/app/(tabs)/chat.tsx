@@ -378,29 +378,30 @@ export default function ChatScreen() {
         </View>
       ) : (
         <View style={[styles.header, styles.compactHeader, { borderBottomColor: c.border }]}>
-          <IconButton icon={PanelLeft} label={t('Chats, profiles and backends')} onPress={openDrawer} />
-          <View style={{ flex: 1, minHeight: 40, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <IconButton icon={PanelLeft} size={18} label={t('Chats, profiles and backends')} onPress={openDrawer} />
+          <View style={{ flex: 1, minHeight: 36, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('Select conversation')}
               onPress={() => setNavigationOpen(true)}
               style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}
             >
-              <Text variant="title" numberOfLines={1}>
+              <Text variant="title" style={{ fontSize: 15, lineHeight: 19 }} numberOfLines={1}>
                 {title || t('New chat')}
               </Text>
-              <Text variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
+              <Text variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1, fontSize: 11, lineHeight: 14 }}>
                 {[model, ctxPct != null ? t('{pct}% context', { pct: ctxPct }) : null, cwd ? String(cwd).split('/').pop() : null]
                   .filter(Boolean)
                   .join(' · ') || t('Hermes Agent')}
               </Text>
             </Pressable>
-            <ChevronDown size={15} color={c.textFaint} />
+            <ChevronDown size={13} color={c.textFaint} />
           </View>
-          {hasMessages ? <IconButton icon={Search} label={t('Search this chat')} onPress={() => setSearching(true)} /> : null}
-          <IconButton icon={PenSquare} label={t('New chat')} onPress={() => setActive(null)} />
+          {hasMessages ? <IconButton icon={Search} size={18} label={t('Search this chat')} onPress={() => setSearching(true)} /> : null}
+          <IconButton icon={PenSquare} size={18} label={t('New chat')} onPress={() => setActive(null)} />
           <IconButton
             icon={EllipsisVertical}
+            size={18}
             label={t('Chat options')}
             onPress={() => (live ? setMenuOpen(true) : toast(t('Start a chat first.'), 'info'))}
           />
@@ -455,7 +456,7 @@ export default function ChatScreen() {
 
         {activeId && live ? <LiveStatus runtimeId={activeId} /> : null}
 
-        <View style={{ paddingBottom: insets.bottom > 0 ? 0 : space.sm }}>
+        <View style={{ paddingBottom: Math.max(insets.bottom, 12) + space.xs }}>
           <Composer
             sessionId={activeId}
             busy={busy}
@@ -599,7 +600,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: 56,
   },
-  compactHeader: { minHeight: 46, paddingVertical: 0 },
+  compactHeader: { minHeight: 40, paddingVertical: 0 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   searchInput: { flex: 1, minWidth: 0, fontSize: 16, height: 48, paddingHorizontal: space.xs },
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.sm },

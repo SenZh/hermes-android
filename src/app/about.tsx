@@ -59,8 +59,8 @@ export default function AboutScreen() {
         <Row
           icon={Code2}
           title={t('App source code')}
-          subtitle="github.com/azygoss/hermes-android"
-          onPress={() => WebBrowser.openBrowserAsync('https://github.com/azygoss/hermes-android')}
+          subtitle="github.com/SenZh/hermes-android"
+          onPress={() => WebBrowser.openBrowserAsync('https://github.com/SenZh/hermes-android')}
         />
         <Row
           icon={Code2}

@@ -382,24 +382,7 @@ export const Composer = memo(function Composer(props: Props) {
       ) : null}
 
       <View style={[styles.box, { backgroundColor: c.surface, borderColor: recording ? c.danger : c.border }]}>
-        <TextInput
-          ref={input}
-          value={text}
-          onChangeText={setText}
-          placeholder={
-            recording ? t('Listening… tap the mic to stop') : busy ? t('Queue a message, or long-press send to steer') : t('Message Hermes')
-          }
-          placeholderTextColor={c.textFaint}
-          multiline
-          accessibilityLabel={t('Message')}
-          style={[styles.input, { color: c.text, fontFamily: font.regular }]}
-          selectionColor={c.accent}
-          cursorColor={c.accent}
-          submitBehavior={sendOnEnter ? 'submit' : 'newline'}
-          onSubmitEditing={sendOnEnter ? () => submit() : undefined}
-          returnKeyType={sendOnEnter ? 'send' : 'default'}
-        />
-        <View style={styles.toolbar}>
+        <View style={styles.inputRow}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('Attach')}
@@ -409,16 +392,54 @@ export const Composer = memo(function Composer(props: Props) {
           >
             <Plus size={20} color={c.textMuted} strokeWidth={1.75} />
           </Pressable>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.pills}
-            keyboardShouldPersistTaps="handled"
-          >
-            {pills}
-          </ScrollView>
-          {!text.trim() && !attachments.length && !busy ? (
+          <TextInput
+            ref={input}
+            value={text}
+            onChangeText={setText}
+            placeholder={
+              recording
+                ? t('Listening… tap the mic to stop')
+                : busy
+                  ? t('Queue a message, or long-press send to steer')
+                  : t('Message Hermes')
+            }
+            placeholderTextColor={c.textFaint}
+            multiline
+            accessibilityLabel={t('Message')}
+            style={[styles.input, { color: c.text, fontFamily: font.regular }]}
+            selectionColor={c.accent}
+            cursorColor={c.accent}
+            submitBehavior={sendOnEnter ? 'submit' : 'newline'}
+            onSubmitEditing={sendOnEnter ? () => submit() : undefined}
+            returnKeyType={sendOnEnter ? 'send' : 'default'}
+          />
+          {showStop ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Stop the agent')}
+              onPress={onStop}
+              hitSlop={4}
+              style={[styles.send, { backgroundColor: c.text }]}
+            >
+              <Square size={12} color={c.bg} fill={c.bg} strokeWidth={2.25} />
+            </Pressable>
+          ) : canSend ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Send')}
+              accessibilityHint={busy ? t('Long-press for steer and interrupt options') : undefined}
+              onPress={() => submit()}
+              onLongPress={() => (busy && canSend ? setModeOpen(true) : undefined)}
+              hitSlop={4}
+              style={[styles.send, { backgroundColor: c.accent }]}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color={c.onAccent} />
+              ) : (
+                <ArrowUp size={18} color={c.onAccent} strokeWidth={2.25} />
+              )}
+            </Pressable>
+          ) : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={recording ? t('Stop recording') : t('Record a voice message')}
@@ -432,29 +453,21 @@ export const Composer = memo(function Composer(props: Props) {
                 <Mic size={20} color={recording ? c.danger : c.textMuted} strokeWidth={1.75} />
               )}
             </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={showStop ? t('Stop the agent') : t('Send')}
-            accessibilityHint={busy && !showStop ? t('Long-press for steer and interrupt options') : undefined}
-            onPress={() => (showStop ? onStop() : submit())}
-            onLongPress={() => (busy && canSend ? setModeOpen(true) : undefined)}
-            disabled={!showStop && !canSend}
-            hitSlop={4}
-            style={[styles.send, { backgroundColor: showStop ? c.text : canSend ? c.accent : c.surfaceAlt }]}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color={c.onAccent} />
-            ) : (
-              <SendIcon
-                size={showStop ? 12 : 18}
-                color={showStop ? c.bg : canSend ? c.onAccent : c.textFaint}
-                fill={showStop ? c.bg : 'none'}
-                strokeWidth={2.25}
-              />
-            )}
-          </Pressable>
+          )}
         </View>
+        {pills ? (
+          <View style={styles.pillsRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.pills}
+              keyboardShouldPersistTaps="handled"
+            >
+              {pills}
+            </ScrollView>
+          </View>
+        ) : null}
       </View>
 
       <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title={t('Add to message')}>
@@ -570,15 +583,26 @@ export const Composer = memo(function Composer(props: Props) {
 })
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: space.md, paddingTop: space.xs },
+  wrap: { paddingHorizontal: space.sm, paddingTop: space.xs },
   box: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.xl, paddingTop: 4, paddingBottom: 6, paddingHorizontal: 6 },
-  input: { fontSize: 16, lineHeight: 22, maxHeight: 160, minHeight: 44, paddingTop: 10, paddingBottom: 6, paddingHorizontal: 10 },
+  inputRow: { flexDirection: 'row', alignItems: 'center' },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 22,
+    maxHeight: 140,
+    minHeight: 40,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: space.xs,
+  },
+  pillsRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 2, paddingBottom: 2, paddingLeft: space.xs },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   optionRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.xs },
   action: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   option: { minHeight: 32, borderRadius: radius.pill, paddingHorizontal: space.sm, flexDirection: 'row', alignItems: 'center', gap: 5 },
   side: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginLeft: 2 },
+  send: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 },
   suggest: { maxHeight: 240, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, marginBottom: space.sm },
   suggestRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, minHeight: 48 },
   attachment: {
