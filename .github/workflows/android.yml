@@ -16,6 +16,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - run: node scripts/check-i18n.mjs
       - run: npm ci
       - run: npx tsc --noEmit
 
