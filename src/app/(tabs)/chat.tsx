@@ -9,6 +9,9 @@ import {
   PanelLeft,
   PenSquare,
   Search,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
   WifiOff,
   X,
   type LucideIcon,
@@ -26,7 +29,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useShallow } from 'zustand/react/shallow'
 
 import { Composer } from '@/components/chat/Composer'
-import { FileViewerSheet } from '@/components/chat/FileViewerSheet'
 import { SessionChooserSheet } from '@/components/chat/SessionChooserSheet'
 import { useOpenNavigationDrawer } from '@/components/MobileNavigation'
 import { ChatDrawer } from '@/components/chat/ChatDrawer'
@@ -39,6 +41,7 @@ import { BusyLine, SubagentChip, TodoPanel } from '@/components/chat/StatusStrip
 import { Transcript } from '@/components/chat/Transcript'
 import { HermesMark } from '@/components/HermesMark'
 import { Button, IconButton, Sheet, Text, toast, toastError } from '@/components/ui'
+import { haptic } from '@/lib/haptics'
 import { useT } from '@/i18n'
 import type { ChatMessage, ChatSession, PendingAttachment } from '@/lib/chat/types'
 import { textOf } from '@/lib/chat/types'
@@ -480,7 +483,6 @@ export default function ChatScreen() {
       </KeyboardAvoidingView>
 
       <SessionChooserSheet visible={navigationOpen} onClose={() => setNavigationOpen(false)} />
-      <FileViewerSheet />
 
       {activeId && live ? (
         <MenuHost
@@ -558,7 +560,8 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   const runtimeId = useChat((s) => (s.activeId && s.sessions[s.activeId] ? s.activeId : null))
   const model = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.info?.model : undefined))
   const effort = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.info?.reasoning_effort : undefined))
-  const yolo = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.info?.yolo : undefined))
+  const approvalMode =
+    useChat((s) => (s.activeId ? (s.sessions[s.activeId]?.info?.approval_mode as string | undefined) : undefined)) ?? 'manual'
   const subagents = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.subagents : undefined))
   const live = !!runtimeId
   const fallback = useRest<{ model?: string }>(['model-info'], '/api/model/info', undefined, { enabled: !live })
@@ -574,11 +577,45 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   }
   const effortLabel = effort ? (effortLabels[effort] ?? effort) : t('default')
 
+  async function cycleApprovalMode() {
+    if (!runtimeId) return
+    haptic('select')
+    const order = ['manual', 'smart', 'off']
+    const next = order[(order.indexOf(approvalMode) + 1) % order.length]
+    try {
+      await rpc().request('config.set', { key: 'approval_mode', value: next, session_id: runtimeId })
+      useChat.setState((st) => ({
+        sessions: {
+          ...st.sessions,
+          [runtimeId]: {
+            ...st.sessions[runtimeId],
+            info: { ...st.sessions[runtimeId]?.info, approval_mode: next },
+          },
+        },
+      }))
+      const modeNames: Record<string, string> = {
+        manual: t('Manual approval'),
+        smart: t('Smart approval'),
+        off: t('Auto run (off)'),
+      }
+      toast(modeNames[next] ?? next, 'info')
+    } catch (e) {
+      toastError(e)
+    }
+  }
+
+  const approvalConfig: Record<string, { icon: LucideIcon; label: string; tone?: 'danger'; color?: string }> = {
+    manual: { icon: ShieldCheck, label: t('Manual') },
+    smart: { icon: ShieldAlert, label: t('Smart') },
+    off: { icon: ShieldOff, label: t('Off'), tone: 'danger' },
+  }
+  const currentApproval = approvalConfig[approvalMode] ?? approvalConfig.manual
+
   return (
     <>
       <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
       <Pill icon={Brain} label={effortLabel} onPress={onReasoning} />
-      {yolo ? <Pill label="YOLO" tone="danger" onPress={onMenu} /> : null}
+      <Pill icon={currentApproval.icon} label={currentApproval.label} tone={currentApproval.tone} onPress={cycleApprovalMode} />
       {runtimeId && subagents ? (
         <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />
       ) : null}

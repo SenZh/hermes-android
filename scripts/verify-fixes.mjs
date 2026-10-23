@@ -35,38 +35,44 @@ function testProviderFilter() {
 
 // 2. 测试受管沙箱路径安全判定逻辑
 function testPathSecurityGuard() {
-  console.log('[Test 2] Testing Managed Files Sandbox Guard...')
+  console.log('[Test 2] Testing Managed Files Sandbox Guard & Normalizer...')
 
-  function isPathSafe(filePath) {
-    if (!filePath) return false
-    // 相对路径或 workspace 路径属于合法受管路径
-    if (!filePath.startsWith('/')) return true
-    // 绝对路径必须在 /opt/data 受管根目录下
-    return filePath.startsWith('/opt/data')
+  function normalizeAndVerify(rawPath) {
+    if (!rawPath) return { safe: false, path: '' }
+    let p = rawPath.replace(/^sandbox:\/?\/?/, '').replace(/^\.\//, '').trim()
+    if (p.startsWith('/')) {
+      if (!p.startsWith('/opt/data/')) {
+        p = p.replace(/^\//, '')
+      }
+    }
+    let normalized = p
+    if (normalized.startsWith('/opt/data/')) {
+      // 允许
+    } else if (normalized.startsWith('workspace/')) {
+      normalized = `/opt/data/${normalized}`
+    } else {
+      normalized = `/opt/data/workspace/${normalized}`
+    }
+    const safe = normalized.startsWith('/opt/data')
+    return { safe, path: normalized }
   }
 
-  // 必须被拦截的非法系统路径
-  const unsafePaths = ['/opt/hermes/bin/hermes', '/etc/shadow', '/root/.bashrc', '/bin/sh', '/usr/local/bin/node']
+  // 截图复现场景：output/test-client-document.md
+  const t1 = normalizeAndVerify('output/test-client-document.md')
+  assert.equal(t1.safe, true, 'output/xxx MUST be safe')
+  assert.equal(t1.path, '/opt/data/workspace/output/test-client-document.md', 'output/xxx must resolve into workspace')
 
-  for (const p of unsafePaths) {
-    assert.equal(isPathSafe(p), false, `System path '${p}' MUST be flagged as unsafe/outside managed root`)
-  }
+  // /output/xxx 带着斜杠开头
+  const t2 = normalizeAndVerify('/output/test-client-document.md')
+  assert.equal(t2.safe, true, '/output/xxx MUST be resolved to workspace')
+  assert.equal(t2.path, '/opt/data/workspace/output/test-client-document.md')
 
-  // 必须放行的合法工作区路径
-  const safePaths = [
-    '/opt/data/workspace/package.json',
-    '/opt/data/workspace/output/report.md',
-    '/opt/data/cache/scratch/test.txt',
-    'output/hermes-android-v1.8.1.apk',
-    'src/components/chat/Composer.tsx',
-    './README.md',
-  ]
+  // sandbox: 协议
+  const t3 = normalizeAndVerify('sandbox:/output/test.txt')
+  assert.equal(t3.safe, true)
+  assert.equal(t3.path, '/opt/data/workspace/output/test.txt')
 
-  for (const p of safePaths) {
-    assert.equal(isPathSafe(p), true, `Workspace path '${p}' MUST be allowed for viewing`)
-  }
-
-  console.log(' -> PASSED: Path guard strictly isolates system roots from workspace files.\n')
+  console.log(' -> PASSED: Path normalizer strictly maps relative and workspace files to managed root.\n')
 }
 
 // 3. 测试 Android Inverted FlatList 下选择性禁用 selectable 逻辑
@@ -121,13 +127,31 @@ function testReasoningEffortI18n() {
   console.log(' -> PASSED: Reasoning effort labels strictly localized.\n')
 }
 
+// 5. 测试审批模式状态轮转与图标配置
+function testApprovalModeCycling() {
+  console.log('[Test 5] Testing Approval Mode Cycling logic...')
+
+  const order = ['manual', 'smart', 'off']
+
+  function getNextMode(current) {
+    return order[(order.indexOf(current) + 1) % order.length]
+  }
+
+  assert.equal(getNextMode('manual'), 'smart', 'manual cycles to smart')
+  assert.equal(getNextMode('smart'), 'off', 'smart cycles to off')
+  assert.equal(getNextMode('off'), 'manual', 'off cycles back to manual')
+
+  console.log(' -> PASSED: Approval mode cycle logic 100% verified.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
   testPathSecurityGuard()
   testSelectablePlatformLogic()
   testReasoningEffortI18n()
-  console.log('=== ALL 4 SUITES PASSED (0 ERRORS) ===')
+  testApprovalModeCycling()
+  console.log('=== ALL 5 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

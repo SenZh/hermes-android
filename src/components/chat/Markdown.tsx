@@ -5,7 +5,8 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { Platform, Pressable, ScrollView, StyleSheet, Text as RNText, View, type TextStyle, type ViewStyle } from 'react-native'
 import { Renderer, useMarkdown } from 'react-native-marked'
 
-import { Text } from '@/components/ui'
+import { Text, toast } from '@/components/ui'
+import { haptic } from '@/lib/haptics'
 import { t } from '@/i18n'
 import { highlight } from '@/lib/highlight'
 import { font, radius, space, useTheme, type Palette } from '@/theme'
@@ -142,11 +143,11 @@ class HermesRenderer extends Renderer {
           if (/^https?:\/\//i.test(href)) {
             void WebBrowser.openBrowserAsync(href)
           } else {
-            // Handle local file links, sandbox: protocol, or relative workspace paths
+            // Push to the full-page viewer with the clean path
             const clean = href.replace(/^sandbox:\/?\/?/, '').replace(/^\.\//, '')
             if (clean) {
-              const { openFileViewer } = require('@/store/chat')
-              openFileViewer(clean)
+              const { router } = require('expo-router')
+              router.push({ pathname: '/viewer', params: { path: clean } })
             }
           }
         }}
@@ -219,14 +220,37 @@ export const Markdown = memo(function Markdown({ text, muted, small, live }: Mar
   const { c, isDark } = useTheme()
   const renderer = useMemo(() => new HermesRenderer(c, isDark), [c, isDark])
   const blocks = useMemo(() => splitBlocks(text), [text])
-  if (blocks.length === 1) return <Block text={blocks[0]} muted={muted} small={small} live={live} renderer={renderer} />
+  if (blocks.length === 1)
+    return (
+      <Pressable
+        accessibilityRole="text"
+        delayLongPress={350}
+        onLongPress={async () => {
+          haptic('light')
+          await Clipboard.setStringAsync(text)
+          toast(t('Copied text'), 'success')
+        }}
+      >
+        <Block text={blocks[0]} muted={muted} small={small} live={live} renderer={renderer} />
+      </Pressable>
+    )
   return (
-    <View style={{ gap: 2 }}>
-      {blocks.map((block, i) => (
-        // Finished blocks keep their text, so the memo skips them while the last one streams.
-        <Block key={i} text={block} muted={muted} small={small} live={live && i === blocks.length - 1} renderer={renderer} />
-      ))}
-    </View>
+    <Pressable
+      accessibilityRole="text"
+      delayLongPress={350}
+      onLongPress={async () => {
+        haptic('light')
+        await Clipboard.setStringAsync(text)
+        toast(t('Copied text'), 'success')
+      }}
+    >
+      <View style={{ gap: 2 }}>
+        {blocks.map((block, i) => (
+          // Finished blocks keep their text, so the memo skips them while the last one streams.
+          <Block key={i} text={block} muted={muted} small={small} live={live && i === blocks.length - 1} renderer={renderer} />
+        ))}
+      </View>
+    </Pressable>
   )
 })
 
