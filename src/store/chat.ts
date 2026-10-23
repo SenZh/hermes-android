@@ -46,6 +46,7 @@ interface ChatState {
   requests: PendingRequest[]
   composerPrefill: { runtimeId: string; text: string } | null
   opening: boolean
+  viewingFilePath: string | null
 }
 
 type TurnListener = (session: ChatSession, message: ChatMessage | null) => void
@@ -63,6 +64,7 @@ export const useChat = create<ChatState>(() => ({
   requests: [],
   composerPrefill: null,
   opening: false,
+  viewingFilePath: null,
 }))
 
 /** Live output of background processes (agent.terminal.output), newest tail only. */
@@ -1092,6 +1094,10 @@ export async function removeAttachment(rid: string, key: string) {
 
 export function setPrefill(rid: string, text: string | null) {
   set({ composerPrefill: text == null ? null : { runtimeId: rid, text } })
+}
+
+export function openFileViewer(path: string | null) {
+  set({ viewingFilePath: path })
 }
 
 /** Run "/name args" through the backend and apply its directive. Returns false if nothing ran. */

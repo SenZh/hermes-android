@@ -119,7 +119,8 @@ export function ModelPicker({ visible, onClose, sessionId, currentModel, current
       caps?: string
     }[] = []
     const needle = q.trim().toLowerCase()
-    const providers = query.data?.providers ?? []
+    // Filter to only authenticated (configured) providers by default
+    const providers = (query.data?.providers ?? []).filter((p) => !!p.authenticated)
     // Current model first — pinned under its own header while not searching.
     const cur =
       !needle && currentModel
@@ -317,4 +318,3 @@ export function ModelPicker({ visible, onClose, sessionId, currentModel, current
     </Sheet>
   )
 }
-

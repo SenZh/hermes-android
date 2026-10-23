@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hermes",
     "slug": "hermes-android",
-    "version": "1.8.1",
+    "version": "1.8.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "hermes",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.azygoss.hermes",
-      "versionCode": 11,
+      "versionCode": 12,
       "adaptiveIcon": {
         "backgroundColor": "#0D0C0B",
         "foregroundImage": "./assets/android-icon-foreground.png",

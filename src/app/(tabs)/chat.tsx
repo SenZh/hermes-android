@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useShallow } from 'zustand/react/shallow'
 
 import { Composer } from '@/components/chat/Composer'
+import { FileViewerSheet } from '@/components/chat/FileViewerSheet'
 import { SessionChooserSheet } from '@/components/chat/SessionChooserSheet'
 import { useOpenNavigationDrawer } from '@/components/MobileNavigation'
 import { ChatDrawer } from '@/components/chat/ChatDrawer'
@@ -479,6 +480,7 @@ export default function ChatScreen() {
       </KeyboardAvoidingView>
 
       <SessionChooserSheet visible={navigationOpen} onClose={() => setNavigationOpen(false)} />
+      <FileViewerSheet />
 
       {activeId && live ? (
         <MenuHost

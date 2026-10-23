@@ -137,7 +137,16 @@ class HermesRenderer extends Renderer {
         accessibilityRole="link"
         style={styles}
         onPress={() => {
-          if (/^https?:\/\//i.test(href)) void WebBrowser.openBrowserAsync(href)
+          if (/^https?:\/\//i.test(href)) {
+            void WebBrowser.openBrowserAsync(href)
+          } else {
+            // Handle local file links, sandbox: protocol, or relative workspace paths
+            const clean = href.replace(/^sandbox:\/?\/?/, '').replace(/^\.\//, '')
+            if (clean) {
+              const { openFileViewer } = require('@/store/chat')
+              openFileViewer(clean)
+            }
+          }
         }}
       >
         {children}
