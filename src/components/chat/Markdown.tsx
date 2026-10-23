@@ -227,10 +227,21 @@ interface MarkdownProps {
   live?: boolean
 }
 
+function preprocessMarkdown(raw: string): string {
+  if (!raw) return ''
+  // 匹配形如 MEDIA:/opt/data/... 或 MEDIA:relative/path 的指令
+  // 自动转换为标准的 Markdown 文件链接卡片: 📄 [文件名](路径)
+  return raw.replace(/`{0,3}MEDIA:\s*([^\s`'"\n]+)`{0,3}/g, (_match, filePath) => {
+    const name = filePath.split('/').pop() || filePath
+    return `📄 [${name}](${filePath})`
+  })
+}
+
 export const Markdown = memo(function Markdown({ text, muted, small, live }: MarkdownProps) {
   const { c, isDark } = useTheme()
   const renderer = useMemo(() => new HermesRenderer(c, isDark), [c, isDark])
-  const blocks = useMemo(() => splitBlocks(text), [text])
+  const cleanText = useMemo(() => preprocessMarkdown(text), [text])
+  const blocks = useMemo(() => splitBlocks(cleanText), [cleanText])
   if (blocks.length === 1) return <Block text={blocks[0]} muted={muted} small={small} live={live} renderer={renderer} />
   return (
     <View style={{ gap: 2 }}>

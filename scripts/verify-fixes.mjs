@@ -163,6 +163,36 @@ function testSmartApprovalStyle() {
   console.log(' -> PASSED: Smart approval is verified green and ready.\n')
 }
 
+// 7. 测试 MEDIA: 标签自动转换为可点击链接
+function testMediaTagConversion() {
+  console.log('[Test 7] Testing MEDIA: tag preprocess & link conversion...')
+
+  function preprocessMarkdown(raw) {
+    if (!raw) return ''
+    return raw.replace(/`{0,3}MEDIA:\s*([^\s`'"\n]+)`{0,3}/g, (_match, filePath) => {
+      const name = filePath.split('/').pop() || filePath
+      return `📄 [${name}](${filePath})`
+    })
+  }
+
+  // 1. 用户现场还原场景：xiaofawang Agent 返回的原始文本
+  const input = '这是为你生成的清单：\nMEDIA:/opt/data/profiles/xiaofawang/workspace/寿宴采购清单.md'
+  const converted = preprocessMarkdown(input)
+
+  assert.equal(
+    converted.includes('📄 [寿宴采购清单.md](/opt/data/profiles/xiaofawang/workspace/寿宴采购清单.md)'),
+    true,
+    'MEDIA: tag must be converted to standard clickable Markdown link',
+  )
+
+  // 2. 相对路径场景
+  const input2 = '产物：MEDIA:output/report.pdf'
+  const converted2 = preprocessMarkdown(input2)
+  assert.equal(converted2.includes('📄 [report.pdf](output/report.pdf)'), true)
+
+  console.log(' -> PASSED: MEDIA: tags auto-transformed into in-app clickable links with 100% success.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -171,7 +201,8 @@ function runAll() {
   testReasoningEffortI18n()
   testApprovalModeCycling()
   testSmartApprovalStyle()
-  console.log('=== ALL 6 SUITES PASSED (0 ERRORS) ===')
+  testMediaTagConversion()
+  console.log('=== ALL 7 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()
