@@ -25,7 +25,7 @@ module.exports = function withReleaseSigning(config) {
       gradle = gradle.replace(/signingConfigs \{\n/, (m) => `${m}${SIGNING}\n`)
       gradle = gradle.replace(
         /(release \{\n\s*\/\/ Caution![^\n]*\n[^\n]*\n\s*)signingConfig signingConfigs\.debug/,
-        '$1signingConfig signingConfigs.release',
+        '$1signingConfig signingConfigs.release\n            v1SigningEnabled true\n            v2SigningEnabled true',
       )
     }
     cfg.modResults.contents = gradle
