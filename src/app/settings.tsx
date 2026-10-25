@@ -121,6 +121,7 @@ export default function SettingsScreen() {
               { value: 'system', label: t('System') },
               { value: 'en', label: 'English' },
               { value: 'tr', label: 'Türkçe' },
+              { value: 'zh', label: '中文' },
             ]}
           />
         </View>

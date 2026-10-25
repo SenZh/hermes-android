@@ -33,6 +33,8 @@ import type { PendingAttachment } from '@/lib/chat/types'
 import { sessionSuccessor, useChat } from '@/store/chat'
 import { useSettings } from '@/store/settings'
 import { centered, font, radius, space, useTheme } from '@/theme'
+import { ModelPicker } from './ModelPicker'
+import { ReasoningSheet } from './ReasoningSheet'
 
 interface Props {
   sessionId: string | null
@@ -111,8 +113,7 @@ function persistDrafts() {
 void AsyncStorage.getItem(DRAFTS_KEY)
   .then((raw) => {
     const parsed: unknown = raw ? JSON.parse(raw) : null
-    if (parsed && typeof parsed === 'object')
-      for (const [k, v] of Object.entries(parsed)) if (typeof v === 'string') drafts.set(k, v)
+    if (parsed && typeof parsed === 'object') for (const [k, v] of Object.entries(parsed)) if (typeof v === 'string') drafts.set(k, v)
   })
   .catch(() => {})
 
@@ -121,9 +122,7 @@ async function shrinkImage(uri: string, name: string, mimeType?: string): Promis
   // GIFs lose their animation when re-encoded.
   if (/gif/i.test(`${mimeType ?? ''} ${name}`)) return null
   try {
-    const size = await new Promise<{ w: number; h: number }>((resolve, reject) =>
-      Image.getSize(uri, (w, h) => resolve({ w, h }), reject),
-    )
+    const size = await new Promise<{ w: number; h: number }>((resolve, reject) => Image.getSize(uri, (w, h) => resolve({ w, h }), reject))
     const ctx = ImageManipulator.manipulate(uri)
     if (Math.max(size.w, size.h) > 2048) ctx.resize(size.w >= size.h ? { width: 2048 } : { height: 2048 })
     const ref = await ctx.renderAsync()
@@ -183,6 +182,11 @@ export const Composer = memo(function Composer(props: Props) {
   const [attachOpen, setAttachOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [modeOpen, setModeOpen] = useState(false)
+  const [modelOpen, setModelOpen] = useState(false)
+  const [reasoningOpen, setReasoningOpen] = useState(false)
+  const model = useChat((s) => (sessionId ? s.sessions[sessionId]?.info?.model : undefined)) as string | undefined
+  const provider = useChat((s) => (sessionId ? s.sessions[sessionId]?.info?.provider : undefined)) as string | undefined
+  const effort = useChat((s) => (sessionId ? s.sessions[sessionId]?.info?.reasoning_effort : undefined)) as string | undefined
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
@@ -378,24 +382,7 @@ export const Composer = memo(function Composer(props: Props) {
       ) : null}
 
       <View style={[styles.box, { backgroundColor: c.surface, borderColor: recording ? c.danger : c.border }]}>
-        <TextInput
-          ref={input}
-          value={text}
-          onChangeText={setText}
-          placeholder={
-            recording ? t('Listening… tap the mic to stop') : busy ? t('Queue a message, or long-press send to steer') : t('Message Hermes')
-          }
-          placeholderTextColor={c.textFaint}
-          multiline
-          accessibilityLabel={t('Message')}
-          style={[styles.input, { color: c.text, fontFamily: font.regular }]}
-          selectionColor={c.accent}
-          cursorColor={c.accent}
-          submitBehavior={sendOnEnter ? 'submit' : 'newline'}
-          onSubmitEditing={sendOnEnter ? () => submit() : undefined}
-          returnKeyType={sendOnEnter ? 'send' : 'default'}
-        />
-        <View style={styles.toolbar}>
+        <View style={styles.inputRow}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('Attach')}
@@ -405,16 +392,54 @@ export const Composer = memo(function Composer(props: Props) {
           >
             <Plus size={20} color={c.textMuted} strokeWidth={1.75} />
           </Pressable>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.pills}
-            keyboardShouldPersistTaps="handled"
-          >
-            {pills}
-          </ScrollView>
-          {!text.trim() && !attachments.length && !busy ? (
+          <TextInput
+            ref={input}
+            value={text}
+            onChangeText={setText}
+            placeholder={
+              recording
+                ? t('Listening… tap the mic to stop')
+                : busy
+                  ? t('Queue a message, or long-press send to steer')
+                  : t('Message Hermes')
+            }
+            placeholderTextColor={c.textFaint}
+            multiline
+            accessibilityLabel={t('Message')}
+            style={[styles.input, { color: c.text, fontFamily: font.regular }]}
+            selectionColor={c.accent}
+            cursorColor={c.accent}
+            submitBehavior={sendOnEnter ? 'submit' : 'newline'}
+            onSubmitEditing={sendOnEnter ? () => submit() : undefined}
+            returnKeyType={sendOnEnter ? 'send' : 'default'}
+          />
+          {showStop ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Stop the agent')}
+              onPress={onStop}
+              hitSlop={4}
+              style={[styles.send, { backgroundColor: c.text }]}
+            >
+              <Square size={12} color={c.bg} fill={c.bg} strokeWidth={2.25} />
+            </Pressable>
+          ) : canSend ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Send')}
+              accessibilityHint={busy ? t('Long-press for steer and interrupt options') : undefined}
+              onPress={() => submit()}
+              onLongPress={() => (busy && canSend ? setModeOpen(true) : undefined)}
+              hitSlop={4}
+              style={[styles.send, { backgroundColor: c.accent }]}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color={c.onAccent} />
+              ) : (
+                <ArrowUp size={18} color={c.onAccent} strokeWidth={2.25} />
+              )}
+            </Pressable>
+          ) : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={recording ? t('Stop recording') : t('Record a voice message')}
@@ -428,29 +453,9 @@ export const Composer = memo(function Composer(props: Props) {
                 <Mic size={20} color={recording ? c.danger : c.textMuted} strokeWidth={1.75} />
               )}
             </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={showStop ? t('Stop the agent') : t('Send')}
-            accessibilityHint={busy && !showStop ? t('Long-press for steer and interrupt options') : undefined}
-            onPress={() => (showStop ? onStop() : submit())}
-            onLongPress={() => (busy && canSend ? setModeOpen(true) : undefined)}
-            disabled={!showStop && !canSend}
-            hitSlop={4}
-            style={[styles.send, { backgroundColor: showStop ? c.text : canSend ? c.accent : c.surfaceAlt }]}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color={c.onAccent} />
-            ) : (
-              <SendIcon
-                size={showStop ? 12 : 18}
-                color={showStop ? c.bg : canSend ? c.onAccent : c.textFaint}
-                fill={showStop ? c.bg : 'none'}
-                strokeWidth={2.25}
-              />
-            )}
-          </Pressable>
+          )}
         </View>
+        {pills ? <View style={styles.pillsRow}>{pills}</View> : null}
       </View>
 
       <Sheet visible={attachOpen} onClose={() => setAttachOpen(false)} title={t('Add to message')}>
@@ -528,17 +533,71 @@ export const Composer = memo(function Composer(props: Props) {
           />
         </View>
       </Sheet>
+
+      <ModelPicker
+        visible={modelOpen}
+        onClose={() => setModelOpen(false)}
+        sessionId={sessionId}
+        currentModel={model}
+        currentProvider={provider}
+      />
+      <ReasoningSheet
+        visible={reasoningOpen}
+        onClose={() => setReasoningOpen(false)}
+        sessionId={sessionId}
+        model={model}
+        provider={provider}
+        effort={effort}
+        onPick={async (level) => {
+          setReasoningOpen(false)
+          const currentId = useChat.getState().activeId
+          if (!currentId) return
+          try {
+            await rpc().request('config.set', { key: 'reasoning', value: level, session_id: currentId })
+            useChat.setState((st) => ({
+              sessions: {
+                ...st.sessions,
+                [currentId]: { ...st.sessions[currentId], info: { ...st.sessions[currentId].info, reasoning_effort: level } },
+              },
+            }))
+            toast(t('Reasoning effort: {level}', { level }), 'success')
+          } catch (e) {
+            toastError(e)
+          }
+        }}
+      />
     </View>
   )
 })
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: space.md, paddingTop: space.xs },
+  wrap: { paddingHorizontal: space.sm, paddingTop: space.xs },
   box: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.xl, paddingTop: 4, paddingBottom: 6, paddingHorizontal: 6 },
-  input: { fontSize: 16, lineHeight: 22, maxHeight: 160, minHeight: 44, paddingTop: 10, paddingBottom: 6, paddingHorizontal: 10 },
+  inputRow: { flexDirection: 'row', alignItems: 'center' },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    lineHeight: 22,
+    maxHeight: 140,
+    minHeight: 40,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: space.xs,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 2,
+    paddingBottom: 2,
+    paddingHorizontal: space.xs,
+  },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  optionRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  action: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  option: { minHeight: 32, borderRadius: radius.pill, paddingHorizontal: space.sm, flexDirection: 'row', alignItems: 'center', gap: 5 },
   side: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginLeft: 2 },
+  send: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 },
   suggest: { maxHeight: 240, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, marginBottom: space.sm },
   suggestRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.md, minHeight: 48 },
   attachment: {

@@ -5,25 +5,19 @@ import {
   ChevronDown,
   ChevronUp,
   EllipsisVertical,
-  History,
+  History as HistoryIcon,
   PanelLeft,
   PenSquare,
   Search,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
   WifiOff,
   X,
+  type LucideIcon,
 } from '@/components/icons'
-import type { LucideIcon } from '@/components/icons'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActivityIndicator,
-  BackHandler,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native'
 import ReanimatedDrawerLayout, {
   DrawerKeyboardDismissMode,
   DrawerPosition,
@@ -35,6 +29,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useShallow } from 'zustand/react/shallow'
 
 import { Composer } from '@/components/chat/Composer'
+import { SessionChooserSheet } from '@/components/chat/SessionChooserSheet'
+import { useOpenNavigationDrawer } from '@/components/MobileNavigation'
 import { ChatDrawer } from '@/components/chat/ChatDrawer'
 import { ConnectionCard } from '@/components/chat/ConnectionCard'
 import { ModelPicker } from '@/components/chat/ModelPicker'
@@ -45,6 +41,7 @@ import { BusyLine, SubagentChip, TodoPanel } from '@/components/chat/StatusStrip
 import { Transcript } from '@/components/chat/Transcript'
 import { HermesMark } from '@/components/HermesMark'
 import { Button, IconButton, Sheet, Text, toast, toastError } from '@/components/ui'
+import { haptic } from '@/lib/haptics'
 import { useT } from '@/i18n'
 import type { ChatMessage, ChatSession, PendingAttachment } from '@/lib/chat/types'
 import { textOf } from '@/lib/chat/types'
@@ -155,7 +152,7 @@ function EmptyChat({ onPick }: { onPick: (text: string) => void }) {
           onPress={() => openStored(last.session_id!).catch(toastError)}
           style={({ pressed }) => [styles.resume, { borderColor: c.border, backgroundColor: pressed ? c.surfaceAlt : c.surface }]}
         >
-          <History size={18} color={c.textMuted} strokeWidth={1.75} />
+          <HistoryIcon size={18} color={c.textMuted} strokeWidth={1.75} />
           <View style={{ flex: 1 }}>
             <Text variant="caption" tone="faint">
               {t('Pick up where you left off')}
@@ -233,23 +230,10 @@ export default function ChatScreen() {
   const [modelOpen, setModelOpen] = useState(false)
   const [reasoningOpen, setReasoningOpen] = useState(false)
   const [editing, setEditing] = useState<ChatMessage | null>(null)
-  const { width, height } = useWindowDimensions()
-  const drawerRef = useRef<DrawerLayoutMethods>(null)
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  // Keep the drawer's content mounted after the first open so later swipes show it at once.
-  const drawerMounted = useRef(false)
-  if (drawerOpen) drawerMounted.current = true
-  const openDrawer = useCallback(() => {
-    drawerMounted.current = true
-    setDrawerOpen(true)
-    drawerRef.current?.openDrawer()
-  }, [])
-  const closeDrawer = useCallback(() => drawerRef.current?.closeDrawer(), [])
-  useEffect(() => {
-    if (!drawerOpen) return
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => (closeDrawer(), true))
-    return () => sub.remove()
-  }, [drawerOpen, closeDrawer])
+  const { height } = useWindowDimensions()
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const openNavigationDrawer = useOpenNavigationDrawer()
+  const openDrawer = useCallback(() => openNavigationDrawer?.(), [openNavigationDrawer])
 
   useEffect(() => {
     if (!params.stored || connState !== 'open') return
@@ -375,184 +359,172 @@ export default function ChatScreen() {
   const provider = live ? liveProvider : defaultModel.data?.provider
 
   return (
-    <ReanimatedDrawerLayout
-      ref={drawerRef}
-      drawerWidth={Math.min(width * 0.84, 340)}
-      drawerPosition={DrawerPosition.LEFT}
-      drawerType={DrawerType.FRONT}
-      edgeWidth={24}
-      overlayColor={c.overlay}
-      keyboardDismissMode={DrawerKeyboardDismissMode.ON_DRAG}
-      onDrawerOpen={() => setDrawerOpen(true)}
-      onDrawerClose={() => setDrawerOpen(false)}
-      renderNavigationView={() => (drawerOpen || drawerMounted.current ? <ChatDrawer onClose={closeDrawer} /> : null)}
-    >
-      <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
-        {searching ? (
-          <View style={[styles.header, { borderBottomColor: c.border }]}>
-            <IconButton icon={X} label={t('Close search')} onPress={closeSearch} />
-            <TextInput
-              value={needle}
-              onChangeText={setNeedle}
-              autoFocus
-              placeholder={t('Search this chat')}
-              placeholderTextColor={c.textFaint}
-              returnKeyType="search"
-              onSubmitEditing={() => stepHit(1)}
-              accessibilityLabel={t('Search this chat')}
-              style={[styles.searchInput, { color: c.text, fontFamily: font.regular }]}
-            />
-            <Text variant="small" tone="muted" style={{ minWidth: 40, textAlign: 'center' }} accessibilityLiveRegion="polite">
-              {needle.trim() ? (hitCount ? `${(hitIndex % hitCount) + 1}/${hitCount}` : '0') : ''}
-            </Text>
-            <IconButton icon={ChevronUp} label={t('Older match')} onPress={() => stepHit(1)} disabled={!hitCount} />
-            <IconButton icon={ChevronDown} label={t('Newer match')} onPress={() => stepHit(-1)} disabled={!hitCount} />
-          </View>
-        ) : (
-          <View style={[styles.header, { borderBottomColor: c.border }]}>
-            <IconButton icon={PanelLeft} label={t('Chats, profiles and backends')} onPress={openDrawer} />
+    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
+      {searching ? (
+        <View style={[styles.header, { borderBottomColor: c.border }]}>
+          <IconButton icon={X} label={t('Close search')} onPress={closeSearch} />
+          <TextInput
+            value={needle}
+            onChangeText={setNeedle}
+            autoFocus
+            placeholder={t('Search this chat')}
+            placeholderTextColor={c.textFaint}
+            returnKeyType="search"
+            onSubmitEditing={() => stepHit(1)}
+            accessibilityLabel={t('Search this chat')}
+            style={[styles.searchInput, { color: c.text, fontFamily: font.regular }]}
+          />
+          <Text variant="small" tone="muted" style={{ minWidth: 40, textAlign: 'center' }} accessibilityLiveRegion="polite">
+            {needle.trim() ? (hitCount ? `${(hitIndex % hitCount) + 1}/${hitCount}` : '0') : ''}
+          </Text>
+          <IconButton icon={ChevronUp} label={t('Older match')} onPress={() => stepHit(1)} disabled={!hitCount} />
+          <IconButton icon={ChevronDown} label={t('Newer match')} onPress={() => stepHit(-1)} disabled={!hitCount} />
+        </View>
+      ) : (
+        <View style={[styles.header, styles.compactHeader, { borderBottomColor: c.border }]}>
+          <IconButton icon={PanelLeft} size={18} label={t('Chats, profiles and backends')} onPress={openDrawer} style={{ marginLeft: 4 }} />
+          <View style={{ flex: 1, minHeight: 36, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('Chat options')}
-              onPress={() => live && setMenuOpen(true)}
-              style={{ flex: 1, minHeight: 48, justifyContent: 'center' }}
+              accessibilityLabel={t('Select conversation')}
+              onPress={() => setNavigationOpen(true)}
+              style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}
             >
-              <Text variant="title" numberOfLines={1}>
+              <Text variant="title" style={{ fontSize: 15, lineHeight: 19 }} numberOfLines={1}>
                 {title || t('New chat')}
               </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <View
-                  style={[styles.dot, { backgroundColor: connState === 'open' ? c.success : connState === 'closed' ? c.danger : c.warn }]}
-                />
-                <Text variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-                  {[model, ctxPct != null ? t('{pct}% context', { pct: ctxPct }) : null, cwd ? String(cwd).split('/').pop() : null]
-                    .filter(Boolean)
-                    .join(' · ') || t('Hermes Agent')}
-                </Text>
-              </View>
+              <Text variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1, fontSize: 11, lineHeight: 14 }}>
+                {[model, ctxPct != null ? t('{pct}% context', { pct: ctxPct }) : null, cwd ? String(cwd).split('/').pop() : null]
+                  .filter(Boolean)
+                  .join(' · ') || t('Hermes Agent')}
+              </Text>
             </Pressable>
-            {hasMessages ? <IconButton icon={Search} label={t('Search this chat')} onPress={() => setSearching(true)} /> : null}
-            <IconButton icon={PenSquare} label={t('New chat')} onPress={() => setActive(null)} />
-            <IconButton
-              icon={EllipsisVertical}
-              label={t('Chat options')}
-              onPress={() => (live ? setMenuOpen(true) : toast(t('Start a chat first.'), 'info'))}
-            />
+            <ChevronDown size={13} color={c.textFaint} />
           </View>
+          {hasMessages ? <IconButton icon={Search} size={18} label={t('Search this chat')} onPress={() => setSearching(true)} /> : null}
+          <IconButton icon={PenSquare} size={18} label={t('New chat')} onPress={() => setActive(null)} />
+          <IconButton
+            icon={EllipsisVertical}
+            size={18}
+            label={t('Chat options')}
+            onPress={() => (live ? setMenuOpen(true) : toast(t('Start a chat first.'), 'info'))}
+          />
+        </View>
+      )}
+
+      <ConnectionBanner />
+
+      {otherRequests.length ? (
+        <Pressable
+          onPress={() => {
+            const r = otherRequests[0]
+            const stored = Object.entries(useChat.getState().storedToRuntime).find(([, rid]) => rid === r.sessionId)?.[0]
+            if (useChat.getState().sessions[r.sessionId]) setActive(r.sessionId)
+            else if (stored) openStored(stored).catch(toastError)
+          }}
+          style={[styles.banner, { backgroundColor: c.accentSoft }]}
+          accessibilityRole="button"
+        >
+          <Text variant="small" tone="accent" weight="semibold">
+            {t('Another chat needs your input ({n})', { n: otherRequests.length })}
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        {opening && !live ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={c.accent} />
+          </View>
+        ) : !live || !activeId || blank ? (
+          <EmptyChat onPick={(text) => handleSend(text, 'auto').catch(toastError)} />
+        ) : (
+          <Transcript runtimeId={activeId} query={query} hitIndex={hitIndex} onHitCount={setHitCount} onEdit={onEdit} />
         )}
 
-        <ConnectionBanner />
-
-        {otherRequests.length ? (
-          <Pressable
-            onPress={() => {
-              const r = otherRequests[0]
-              const stored = Object.entries(useChat.getState().storedToRuntime).find(([, rid]) => rid === r.sessionId)?.[0]
-              if (useChat.getState().sessions[r.sessionId]) setActive(r.sessionId)
-              else if (stored) openStored(stored).catch(toastError)
-            }}
-            style={[styles.banner, { backgroundColor: c.accentSoft }]}
-            accessibilityRole="button"
+        {myConnections.length || myRequests.length ? (
+          // Long commands and multi-question clarifies scroll instead of pushing the composer away.
+          <ScrollView
+            style={{ maxHeight: height * 0.45, flexGrow: 0 }}
+            contentContainerStyle={{ paddingHorizontal: space.md, gap: space.sm, paddingBottom: space.sm }}
+            keyboardShouldPersistTaps="handled"
           >
-            <Text variant="small" tone="accent" weight="semibold">
-              {t('Another chat needs your input ({n})', { n: otherRequests.length })}
-            </Text>
-          </Pressable>
+            {myConnections.map((pc) => (
+              <ConnectionCard key={pc.op.op_id} pc={pc} />
+            ))}
+            {myRequests.map((r) => (
+              <RequestCard key={r.id} req={r} />
+            ))}
+          </ScrollView>
         ) : null}
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-          {opening && !live ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={c.accent} />
-            </View>
-          ) : !live || !activeId || blank ? (
-            <EmptyChat onPick={(text) => handleSend(text, 'auto').catch(toastError)} />
-          ) : (
-            <Transcript runtimeId={activeId} query={query} hitIndex={hitIndex} onHitCount={setHitCount} onEdit={onEdit} />
-          )}
+        {activeId && live ? <LiveStatus runtimeId={activeId} /> : null}
 
-          {myConnections.length || myRequests.length ? (
-            // Long commands and multi-question clarifies scroll instead of pushing the composer away.
-            <ScrollView
-              style={{ maxHeight: height * 0.45, flexGrow: 0 }}
-              contentContainerStyle={{ paddingHorizontal: space.md, gap: space.sm, paddingBottom: space.sm }}
-              keyboardShouldPersistTaps="handled"
-            >
-              {myConnections.map((pc) => (
-                <ConnectionCard key={pc.op.op_id} pc={pc} />
-              ))}
-              {myRequests.map((r) => (
-                <RequestCard key={r.id} req={r} />
-              ))}
-            </ScrollView>
-          ) : null}
-
-          {activeId && live ? <LiveStatus runtimeId={activeId} /> : null}
-
-          <View style={{ paddingBottom: insets.bottom > 0 ? 0 : space.sm }}>
-            <Composer
-              sessionId={activeId}
-              busy={busy}
-              attachments={attachments ?? NO_ATTACHMENTS}
-              editing={!!editing}
-              prefill={prefill}
-              onPrefillConsumed={onPrefillConsumed}
-              onCancelEdit={onCancelEdit}
-              onSend={onSend}
-              onStop={onStop}
-              ensureSession={ensureSession}
-              onAttachImage={onAttachImage}
-              onAttachFile={onAttachFile}
-              onAttachPdf={onAttachPdf}
-              onGenerateImage={onGenerateImage}
-              onRemoveAttachment={onRemoveAttachment}
-              pills={pills}
-            />
-          </View>
-        </KeyboardAvoidingView>
-
-        {activeId && live ? (
-          <MenuHost
-            runtimeId={activeId}
-            visible={menuOpen}
-            onClose={() => setMenuOpen(false)}
-            onPickModel={() => setModelOpen(true)}
-            onPickReasoning={() => setReasoningOpen(true)}
+        <View style={{ paddingBottom: Math.max(insets.bottom, 12) + space.xs }}>
+          <Composer
+            sessionId={activeId}
+            busy={busy}
+            attachments={attachments ?? NO_ATTACHMENTS}
+            editing={!!editing}
+            prefill={prefill}
+            onPrefillConsumed={onPrefillConsumed}
+            onCancelEdit={onCancelEdit}
+            onSend={onSend}
+            onStop={onStop}
+            ensureSession={ensureSession}
+            onAttachImage={onAttachImage}
+            onAttachFile={onAttachFile}
+            onAttachPdf={onAttachPdf}
+            onGenerateImage={onGenerateImage}
+            onRemoveAttachment={onRemoveAttachment}
+            pills={pills}
           />
-        ) : null}
-        <ModelPicker
-          visible={modelOpen}
-          onClose={() => setModelOpen(false)}
-          sessionId={activeId}
-          currentModel={model as string | undefined}
-          currentProvider={provider as string | undefined}
+        </View>
+      </KeyboardAvoidingView>
+
+      <SessionChooserSheet visible={navigationOpen} onClose={() => setNavigationOpen(false)} />
+
+      {activeId && live ? (
+        <MenuHost
+          runtimeId={activeId}
+          visible={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          onPickModel={() => setModelOpen(true)}
+          onPickReasoning={() => setReasoningOpen(true)}
         />
-        <ReasoningSheet
-          visible={reasoningOpen}
-          onClose={() => setReasoningOpen(false)}
-          sessionId={activeId}
-          model={model as string | undefined}
-          provider={provider as string | undefined}
-          effort={effort}
-          onPick={async (level) => {
-            setReasoningOpen(false)
-            try {
-              const sid = await ensureSession()
-              await rpc().request('config.set', { key: 'reasoning', value: level, session_id: sid })
-              useChat.setState((st) => ({
-                sessions: {
-                  ...st.sessions,
-                  [sid]: { ...st.sessions[sid], info: { ...st.sessions[sid].info, reasoning_effort: level } },
-                },
-              }))
-              toast(t('Reasoning effort: {level}', { level }), 'success')
-            } catch (e) {
-              toastError(e)
-            }
-          }}
-        />
-      </View>
-    </ReanimatedDrawerLayout>
+      ) : null}
+      <ModelPicker
+        visible={modelOpen}
+        onClose={() => setModelOpen(false)}
+        sessionId={activeId}
+        currentModel={model as string | undefined}
+        currentProvider={provider as string | undefined}
+      />
+      <ReasoningSheet
+        visible={reasoningOpen}
+        onClose={() => setReasoningOpen(false)}
+        sessionId={activeId}
+        model={model as string | undefined}
+        provider={provider as string | undefined}
+        effort={effort}
+        onPick={async (level) => {
+          setReasoningOpen(false)
+          try {
+            const sid = await ensureSession()
+            await rpc().request('config.set', { key: 'reasoning', value: level, session_id: sid })
+            useChat.setState((st) => ({
+              sessions: {
+                ...st.sessions,
+                [sid]: { ...st.sessions[sid], info: { ...st.sessions[sid].info, reasoning_effort: level } },
+              },
+            }))
+            toast(t('Reasoning effort: {level}', { level }), 'success')
+          } catch (e) {
+            toastError(e)
+          }
+        }}
+      />
+    </View>
   )
 }
 
@@ -588,38 +560,120 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   const runtimeId = useChat((s) => (s.activeId && s.sessions[s.activeId] ? s.activeId : null))
   const model = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.info?.model : undefined))
   const effort = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.info?.reasoning_effort : undefined))
-  const yolo = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.info?.yolo : undefined))
+  const approvalMode =
+    useChat((s) => (s.activeId ? (s.sessions[s.activeId]?.info?.approval_mode as string | undefined) : undefined)) ?? 'manual'
   const subagents = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.subagents : undefined))
   const live = !!runtimeId
   const fallback = useRest<{ model?: string }>(['model-info'], '/api/model/info', undefined, { enabled: !live })
+
+  const effortLabels: Record<string, string> = {
+    none: t('Off'),
+    minimal: t('Minimal'),
+    low: t('Low'),
+    medium: t('Medium'),
+    high: t('High'),
+    xhigh: t('Extra high'),
+    max: t('Max'),
+  }
+  const effortLabel = effort ? (effortLabels[effort] ?? effort) : t('default')
+
+  async function cycleApprovalMode() {
+    if (!runtimeId) return
+    haptic('select')
+    const order = ['manual', 'smart', 'off']
+    const next = order[(order.indexOf(approvalMode) + 1) % order.length]
+    try {
+      await rpc().request('config.set', { key: 'approval_mode', value: next, session_id: runtimeId })
+      useChat.setState((st) => ({
+        sessions: {
+          ...st.sessions,
+          [runtimeId]: {
+            ...st.sessions[runtimeId],
+            info: { ...st.sessions[runtimeId]?.info, approval_mode: next },
+          },
+        },
+      }))
+      const modeNames: Record<string, string> = {
+        manual: t('Manual approval'),
+        smart: t('Smart approval'),
+        off: t('Auto run (off)'),
+      }
+      toast(modeNames[next] ?? next, 'info')
+    } catch (e) {
+      toastError(e)
+    }
+  }
+
+  const approvalConfig: Record<string, { icon: LucideIcon; label: string; tone?: 'danger' | 'success' | 'warn'; colorOverride?: string }> =
+    {
+      manual: { icon: ShieldCheck, label: t('Manual') },
+      smart: { icon: ShieldAlert, label: t('Smart'), tone: 'success' },
+      off: { icon: ShieldOff, label: t('Off'), tone: 'danger' },
+    }
+  const currentApproval = approvalConfig[approvalMode] ?? approvalConfig.manual
+
   return (
-    <>
-      <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
-      <Pill icon={Brain} label={String(effort || t('default'))} onPress={onReasoning} />
-      {yolo ? <Pill label="YOLO" tone="danger" onPress={onMenu} /> : null}
-      {runtimeId && subagents ? (
-        <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />
-      ) : null}
-    </>
+    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}
+        style={{ flex: 1, marginRight: space.xs }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
+        <Pill icon={Brain} label={effortLabel} onPress={onReasoning} />
+        {runtimeId && subagents ? (
+          <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />
+        ) : null}
+      </ScrollView>
+      <Pill
+        icon={currentApproval.icon}
+        label={currentApproval.label}
+        tone={currentApproval.tone}
+        colorOverride={currentApproval.colorOverride}
+        noChevron
+        onPress={cycleApprovalMode}
+      />
+    </View>
   )
 }
 
-function Pill({ label, onPress, tone, icon: Icon }: { label: string; onPress: () => void; tone?: 'danger'; icon?: LucideIcon }) {
+function Pill({
+  label,
+  onPress,
+  tone,
+  colorOverride,
+  noChevron,
+  icon: Icon,
+}: {
+  label: string
+  onPress: () => void
+  tone?: 'danger' | 'success' | 'warn'
+  colorOverride?: string
+  noChevron?: boolean
+  icon?: LucideIcon
+}) {
   const { c } = useTheme()
-  const color = tone === 'danger' ? c.danger : c.textMuted
+  const color = colorOverride || (tone === 'danger' ? c.danger : tone === 'success' ? c.success : tone === 'warn' ? c.warn : c.textMuted)
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       hitSlop={7}
-      style={({ pressed }) => [styles.pill, { backgroundColor: pressed ? c.surfaceAlt : tone === 'danger' ? c.dangerSoft : 'transparent' }]}
+      style={({ pressed }) => [
+        styles.pill,
+        {
+          backgroundColor: pressed ? c.surfaceAlt : tone === 'danger' ? c.dangerSoft : tone === 'success' ? c.successSoft : 'transparent',
+        },
+      ]}
     >
       {Icon ? <Icon size={14} color={color} strokeWidth={1.75} /> : null}
       <Text variant="small" weight="medium" numberOfLines={1} style={{ maxWidth: 170, color }}>
         {label}
       </Text>
-      <ChevronDown size={13} color={c.textFaint} strokeWidth={1.75} />
+      {!noChevron ? <ChevronDown size={13} color={c.textFaint} strokeWidth={1.75} /> : null}
     </Pressable>
   )
 }
@@ -632,6 +686,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: 56,
   },
+  compactHeader: { minHeight: 40, paddingVertical: 0 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   searchInput: { flex: 1, minWidth: 0, fontSize: 16, height: 48, paddingHorizontal: space.xs },
   banner: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.sm },

@@ -2,10 +2,11 @@ import * as Clipboard from 'expo-clipboard'
 import * as WebBrowser from 'expo-web-browser'
 import { Check, Copy } from '@/components/icons'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text as RNText, View, type TextStyle, type ViewStyle } from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, Text as RNText, View, type TextStyle, type ViewStyle } from 'react-native'
 import { Renderer, useMarkdown } from 'react-native-marked'
 
-import { Text } from '@/components/ui'
+import { Text, toast } from '@/components/ui'
+import { haptic } from '@/lib/haptics'
 import { t } from '@/i18n'
 import { highlight } from '@/lib/highlight'
 import { font, radius, space, useTheme, type Palette } from '@/theme'
@@ -110,6 +111,7 @@ class HermesRenderer extends Renderer {
     private readonly c: Palette,
     private readonly isDark: boolean,
   ) {
+    // Enable selectable for fine-grained native text selection
     super({ selectable: true })
   }
 
@@ -123,7 +125,19 @@ class HermesRenderer extends Renderer {
         </RNText>
       )),
     )
-    return super.table(bold, rows, tableStyle, rowStyle, cellStyle)
+    // Wrap in an isolated horizontal ScrollView to ensure independent scrollability
+    return (
+      <ScrollView
+        key={this.getKey()}
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        contentContainerStyle={{ minWidth: '100%' }}
+        style={{ marginVertical: space.xs }}
+      >
+        {super.table(bold, rows, tableStyle, rowStyle, cellStyle)}
+      </ScrollView>
+    )
   }
 
   code(text: string, language?: string, _container?: ViewStyle, _textStyle?: TextStyle): ReactNode {
@@ -137,7 +151,16 @@ class HermesRenderer extends Renderer {
         accessibilityRole="link"
         style={styles}
         onPress={() => {
-          if (/^https?:\/\//i.test(href)) void WebBrowser.openBrowserAsync(href)
+          if (/^https?:\/\//i.test(href)) {
+            void WebBrowser.openBrowserAsync(href)
+          } else {
+            // Push to the full-page viewer with the clean path
+            const clean = href.replace(/^sandbox:\/?\/?/, '').replace(/^\.\//, '')
+            if (clean) {
+              const { router } = require('expo-router')
+              router.push({ pathname: '/viewer', params: { path: clean } })
+            }
+          }
         }}
       >
         {children}
@@ -204,10 +227,21 @@ interface MarkdownProps {
   live?: boolean
 }
 
+function preprocessMarkdown(raw: string): string {
+  if (!raw) return ''
+  // 匹配形如 MEDIA:/opt/data/... 或 MEDIA:relative/path 的指令
+  // 自动转换为标准的 Markdown 文件链接卡片: 📄 [文件名](路径)
+  return raw.replace(/`{0,3}MEDIA:\s*([^\s`'"\n]+)`{0,3}/g, (_match, filePath) => {
+    const name = filePath.split('/').pop() || filePath
+    return `📄 [${name}](${filePath})`
+  })
+}
+
 export const Markdown = memo(function Markdown({ text, muted, small, live }: MarkdownProps) {
   const { c, isDark } = useTheme()
   const renderer = useMemo(() => new HermesRenderer(c, isDark), [c, isDark])
-  const blocks = useMemo(() => splitBlocks(text), [text])
+  const cleanText = useMemo(() => preprocessMarkdown(text), [text])
+  const blocks = useMemo(() => splitBlocks(cleanText), [cleanText])
   if (blocks.length === 1) return <Block text={blocks[0]} muted={muted} small={small} live={live} renderer={renderer} />
   return (
     <View style={{ gap: 2 }}>

@@ -102,7 +102,11 @@ export function ModelPicker({ visible, onClose, sessionId, currentModel, current
   const query = useQuery({
     queryKey: ['model.options', sessionId],
     enabled: visible,
-    queryFn: () => rpc().request('model.options', { session_id: sessionId ?? undefined }) as Promise<ModelOptionsResult>,
+    queryFn: () =>
+      rpc().request('model.options', {
+        session_id: sessionId ?? undefined,
+        explicit_only: true,
+      }) as Promise<ModelOptionsResult>,
   })
 
   const rows = useMemo(() => {
@@ -119,7 +123,8 @@ export function ModelPicker({ visible, onClose, sessionId, currentModel, current
       caps?: string
     }[] = []
     const needle = q.trim().toLowerCase()
-    const providers = query.data?.providers ?? []
+    // Filter to only authenticated (configured) providers by default
+    const providers = (query.data?.providers ?? []).filter((p) => !!p.authenticated)
     // Current model first — pinned under its own header while not searching.
     const cur =
       !needle && currentModel
@@ -317,4 +322,3 @@ export function ModelPicker({ visible, onClose, sessionId, currentModel, current
     </Sheet>
   )
 }
-

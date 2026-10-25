@@ -6,7 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { SessionRow } from '@/app/(tabs)/sessions'
 import { HermesMark } from '@/components/HermesMark'
-import { Check, ChevronDown, ChevronUp, History, PenSquare, Pin, Search, Server, Settings2 } from '@/components/icons'
+import {
+  Bot,
+  CalendarClock,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  History as HistoryIcon,
+  LayoutGrid,
+  PenSquare,
+  Pin,
+  Search,
+  Server,
+  Settings2,
+} from '@/components/icons'
+import type { LucideIcon } from '@/components/icons'
 import { switchProfile, useProfiles } from '@/components/ProfileSwitcher'
 import { Chip, Text, toastError } from '@/components/ui'
 import { useT } from '@/i18n'
@@ -190,22 +204,60 @@ export function ChatDrawer({ onClose }: { onClose: () => void }) {
         }
       />
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          onClose()
-          router.navigate('/sessions')
-        }}
-        style={({ pressed }) => [
-          styles.footer,
-          { borderTopColor: c.border, paddingBottom: insets.bottom + space.md },
-          pressed && { backgroundColor: c.surfaceAlt },
-        ]}
-      >
-        <History size={18} color={c.textMuted} strokeWidth={1.75} />
-        <Text tone="muted">{t('All sessions')}</Text>
-      </Pressable>
+      <View style={[styles.footer, { borderTopColor: c.border, paddingBottom: insets.bottom + space.sm }]}>
+        <View style={styles.navRow}>
+          <DrawerNavItem
+            icon={HistoryIcon}
+            label={t('Sessions')}
+            onPress={() => {
+              onClose()
+              router.navigate('/sessions')
+            }}
+          />
+          <DrawerNavItem
+            icon={Bot}
+            label={t('Agent')}
+            onPress={() => {
+              onClose()
+              router.navigate('/agent')
+            }}
+          />
+          <DrawerNavItem
+            icon={CalendarClock}
+            label={t('Automate')}
+            onPress={() => {
+              onClose()
+              router.navigate('/automate')
+            }}
+          />
+          <DrawerNavItem
+            icon={Settings2}
+            label={t('Settings')}
+            onPress={() => {
+              onClose()
+              router.navigate('/more')
+            }}
+          />
+        </View>
+      </View>
     </View>
+  )
+}
+
+function DrawerNavItem({ icon: Icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+  const { c } = useTheme()
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.navItem, { backgroundColor: pressed ? c.surfaceAlt : 'transparent' }]}
+    >
+      <Icon size={18} color={c.textMuted} strokeWidth={1.75} />
+      <Text variant="caption" tone="muted">
+        {label}
+      </Text>
+    </Pressable>
   )
 }
 
@@ -284,11 +336,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
+    paddingHorizontal: space.xs,
+    paddingTop: space.xs + 2,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  navRow: { flexDirection: 'row', gap: 2 },
+  navItem: { flex: 1, minWidth: 0, minHeight: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 2 },
 })

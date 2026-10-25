@@ -4,14 +4,13 @@
 
 A native Android app for [Hermes Agent](https://github.com/NousResearch/hermes-agent), the self-improving AI agent by Nous Research. It is a full remote control for a Hermes backend: chat with live tool output, approve commands, manage skills, memory, models, MCP servers, scheduled jobs, messaging platforms, files and the rest of the agent from your phone.
 
-Built with React Native (Expo SDK 57). English and Turkish UI.
+Built with React Native (Expo SDK 57). English, Turkish and Simplified Chinese UI.
 
 
 ### 📥 中文版下载 (Download APK)
 
-- **[直接下载最新中文版 (arm64 推荐)](https://github.com/SenZh/hermes-android/releases/latest/download/hermes-android-1.8.0-zh-arm64.apk)**（适配近几年绝大多数主流安卓手机）
-- **[下载通用兼容版 APK](https://github.com/SenZh/hermes-android/releases/latest/download/hermes-android-v1.8.0-zh.apk)**（老款手机或 32 位设备）
-- **[查看所有版本发布页 (All Releases)](https://github.com/SenZh/hermes-android/releases/latest)**
+- **[下载最新中文版](https://github.com/SenZh/hermes-android/releases)** — 进 Release 页选最新的 `hermes-android-v*.apk`；v1.8.1 为通用包（约 85 MB，含 arm64 + 32 位），暂无单独的 arm64 精简包
+- **[直接下载当前 v1.8.1 通用包](https://github.com/SenZh/hermes-android/releases/download/v1.8.1/hermes-android-v1.8.1.apk)**（约 85 MB）
 
 *(上游英文原版仓库：[azygoss/hermes-android](https://github.com/azygoss/hermes-android))*
 

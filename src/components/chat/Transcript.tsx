@@ -146,7 +146,7 @@ const NO_HITS: number[] = []
 const keyOf = (m: ChatMessage) => m.id
 
 const styles = StyleSheet.create({
-  content: { padding: space.lg, gap: space.lg },
+  content: { paddingHorizontal: space.sm, paddingTop: space.sm, paddingBottom: space.lg, gap: space.md },
   daySep: { alignSelf: 'center', marginBottom: space.sm },
   jumpWrap: { position: 'absolute', right: space.lg, bottom: space.md },
   jump: {
