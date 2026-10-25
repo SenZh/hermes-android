@@ -7,6 +7,7 @@ import {
   Clock,
   Copy,
   FileText,
+  GitBranch,
   Image as ImageIcon,
   Info,
   RotateCcw,
@@ -20,9 +21,11 @@ import {
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Animated, Easing, Platform, Pressable, Share, StyleSheet, View } from 'react-native'
 
-import { Badge, Text, toast } from '@/components/ui'
+import { Badge, Text, toast, toastError } from '@/components/ui'
 import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
+import { rpc } from '@/lib/hermes'
+import { openStored, useChat } from '@/store/chat'
 import { hhmm } from '@/lib/format'
 import { textOf, type ChatMessage, type Part, type ToolPart } from '@/lib/chat/types'
 import { speak } from '@/lib/voice'
@@ -66,9 +69,14 @@ function Reasoning({ text, live }: { text: string; live: boolean }) {
   )
 }
 
-function formatElapsed(ms: number) {
-  const s = Math.round(ms / 1000)
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(1, Math.round(ms / 1000))
+  if (totalSeconds < 60) {
+    return `${totalSeconds}秒`
+  }
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return seconds > 0 ? `${minutes}分${seconds}秒` : `${minutes}分钟`
 }
 
 /** Long pasted prompts (logs, files) fold to a dozen lines so the reply stays in view. */
@@ -207,6 +215,37 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
 
   if (message.role === 'user') {
     const text = textOf(message)
+
+    async function handleFork() {
+      const sid = useChat.getState().activeId
+      if (!sid) return
+      haptic('select')
+      try {
+        const res = await rpc().request('session.branch', { session_id: sid })
+        const stored = (res as { stored_session_id?: string }).stored_session_id
+        if (stored) {
+          await openStored(stored)
+          toast(t('Branched into a new chat'), 'success')
+        }
+      } catch (e) {
+        toastError(e)
+      }
+    }
+
+    function handleRewind() {
+      haptic('select')
+      if (onEdit) {
+        onEdit(message)
+        toast(t('Rewound to this message — edit or re-send to branch history'), 'info')
+      }
+    }
+
+    async function handleCopy() {
+      haptic('light')
+      await Clipboard.setStringAsync(text)
+      toast(t('Copied'), 'success')
+    }
+
     return (
       <View style={styles.userWrap}>
         <Pressable
@@ -258,6 +297,40 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
             {message.agentReactions.join(' ')}
           </Text>
         ) : null}
+        <View style={styles.userMeta}>
+          {onEdit && message.rowId != null ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('Rewind to this message')}
+              hitSlop={8}
+              onPress={handleRewind}
+              style={styles.userAction}
+            >
+              <RotateCcw size={13} color={c.textFaint} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('Fork into a new chat')}
+            hitSlop={8}
+            onPress={handleFork}
+            style={styles.userAction}
+          >
+            <GitBranch size={13} color={c.textFaint} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('Copy text')}
+            hitSlop={8}
+            onPress={handleCopy}
+            style={styles.userAction}
+          >
+            <Copy size={13} color={c.textFaint} />
+          </Pressable>
+          <Text variant="caption" tone="faint" style={{ marginLeft: space.xxs }}>
+            {hhmm(message.at)}
+          </Text>
+        </View>
         {message.pending === 'queued' || message.error ? (
           <View style={styles.meta}>
             {message.pending === 'queued' ? (
@@ -273,15 +346,8 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
                 {message.error}
               </Text>
             ) : null}
-            <Text variant="caption" tone="faint" style={{ marginLeft: 'auto' }}>
-              {hhmm(message.at)}
-            </Text>
           </View>
-        ) : (
-          <Text variant="caption" tone="faint" style={{ alignSelf: 'flex-end' }}>
-            {hhmm(message.at)}
-          </Text>
-        )}
+        ) : null}
       </View>
     )
   }
@@ -398,9 +464,10 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
             <Text variant="caption" tone="faint">
               {hhmm(message.at)}
             </Text>
-            {message.elapsedMs && message.elapsedMs >= 2000 ? (
+            {message.elapsedMs ? (
               <Text variant="caption" tone="faint">
-                {t('Worked for {time}', { time: formatElapsed(message.elapsedMs) })}
+                {t('Worked for {time}', { time: formatDuration(message.elapsedMs) })}
+                {message.tps ? ` · ${message.tps} tok/s` : ''}
               </Text>
             ) : null}
           </View>
@@ -438,6 +505,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: space.xs, alignItems: 'center' },
   action: { width: 36, height: 32, alignItems: 'center', justifyContent: 'center' },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  userMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.xs, paddingTop: 2 },
+  userAction: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   metaRight: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: space.sm },
   attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   fileChip: {

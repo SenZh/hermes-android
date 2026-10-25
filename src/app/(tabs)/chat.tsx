@@ -534,9 +534,18 @@ function LiveStatus({ runtimeId }: { runtimeId: string }) {
   const busy = useChat((s) => !!s.sessions[runtimeId]?.busy)
   const status = useChat((s) => s.sessions[runtimeId]?.status ?? null)
   const since = useChat((s) => s.sessions[runtimeId]?.turnStartedAt ?? null)
+  const subagents = useChat((s) => s.sessions[runtimeId]?.subagents)
   return (
     <>
       {todos ? <TodoPanel todos={todos} /> : null}
+      {subagents && Object.keys(subagents).length > 0 ? (
+        <View style={{ paddingHorizontal: space.md, paddingBottom: space.xs }}>
+          <SubagentChip
+            subagents={subagents}
+            onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })}
+          />
+        </View>
+      ) : null}
       {busy ? <BusyLine status={status} since={since} /> : null}
     </>
   )
@@ -562,7 +571,6 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   const effort = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.info?.reasoning_effort : undefined))
   const approvalMode =
     useChat((s) => (s.activeId ? (s.sessions[s.activeId]?.info?.approval_mode as string | undefined) : undefined)) ?? 'manual'
-  const subagents = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.subagents : undefined))
   const live = !!runtimeId
   const fallback = useRest<{ model?: string }>(['model-info'], '/api/model/info', undefined, { enabled: !live })
 
@@ -623,9 +631,6 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
       >
         <Pill label={String((live ? model : fallback.data?.model) ?? t('Model'))} onPress={onModel} />
         <Pill icon={Brain} label={effortLabel} onPress={onReasoning} />
-        {runtimeId && subagents ? (
-          <SubagentChip subagents={subagents} onPress={() => router.push({ pathname: '/session/agents', params: { sid: runtimeId } })} />
-        ) : null}
       </ScrollView>
       <Pill
         icon={currentApproval.icon}
