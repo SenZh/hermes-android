@@ -1,5 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { File, Paths } from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import { Image } from 'expo-image'
 import * as Sharing from 'expo-sharing'
 import { Platform, ScrollView, View } from 'react-native'
@@ -26,7 +28,10 @@ export default function DocumentViewerScreen() {
   const rawPath = params.path ? decodeURIComponent(params.path) : ''
 
   // 1. 标准化路径：
-  let p = rawPath.replace(/^sandbox:\/?\/?/, '').replace(/^\.\//, '').trim()
+  let p = rawPath
+    .replace(/^sandbox:\/?\/?/, '')
+    .replace(/^\.\//, '')
+    .trim()
 
   // 如果以 / 开头，且不是 /opt/data 开头，尝试剥离绝对前缀或判断是否为受管路径
   if (p.startsWith('/')) {
@@ -91,17 +96,63 @@ export default function DocumentViewerScreen() {
     }
   }
 
-  // 下载保存到手机 Cache/临时区并通知
+  // 真正的文件落盘保存（利用 Android SAF 存储访问框架保存到手机公共存储，如 Download 目录）
+  const SAVED_SAF_DIR_KEY = 'hermes_download_saf_dir_uri'
+
   async function download() {
     if (!normalized || isSystemRestricted) return
     try {
       if (Platform.OS === 'web') return toast(t('Downloading is available in the Android app.'), 'info')
-      const dest = new File(Paths.cache, fileName)
-      if (dest.exists) dest.delete()
+
+      // 1. 先下载到应用内部临时缓存
+      const tempDest = new File(Paths.cache, fileName)
+      if (tempDest.exists) tempDest.delete()
       const url = hermes().rest.url('/api/files/download', { path: normalized })
-      await File.downloadFileAsync(url, dest, { headers: await hermes().authHeaders() })
-      toast(t('File ready: {name}', { name: fileName }), 'success')
-      await Sharing.shareAsync(dest.uri, { mimeType: mime || undefined })
+      await File.downloadFileAsync(url, tempDest, { headers: await hermes().authHeaders() })
+
+      // 2. 读取临时文件的 base64 内容
+      const base64Content = await FileSystem.readAsStringAsync(tempDest.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+
+      const fileMime = mime || 'application/octet-stream'
+
+      // 3. 检查是否有已保存授权的目录
+      let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
+      let fileUri: string | null = null
+
+      if (targetDirUri) {
+        try {
+          fileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
+        } catch {
+          // 授权失效或目录不存在，清空重试
+          targetDirUri = null
+          await AsyncStorage.removeItem(SAVED_SAF_DIR_KEY)
+        }
+      }
+
+      // 4. 若无有效目录，唤起系统目录授权选择器（默认可选择 Downloads 目录）
+      if (!fileUri) {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync()
+        if (!permissions.granted) {
+          // 用户取消了选择
+          if (tempDest.exists) tempDest.delete()
+          return
+        }
+        targetDirUri = permissions.directoryUri
+        await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
+        fileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
+      }
+
+      // 5. 写入公共文件系统
+      await FileSystem.writeAsStringAsync(fileUri, base64Content, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+
+      // 6. 清理临时缓存
+      if (tempDest.exists) tempDest.delete()
+
+      toast(t('Saved to device: {name}', { name: fileName }), 'success')
     } catch (e) {
       toastError(e)
     }
