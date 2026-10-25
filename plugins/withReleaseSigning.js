@@ -10,11 +10,15 @@ const SIGNING = `
                 storePassword System.getenv('HERMES_KEYSTORE_PASSWORD')
                 keyAlias System.getenv('HERMES_KEY_ALIAS') ?: 'hermes-android'
                 keyPassword System.getenv('HERMES_KEY_PASSWORD') ?: System.getenv('HERMES_KEYSTORE_PASSWORD')
+                v1SigningEnabled true
+                v2SigningEnabled true
             } else {
                 storeFile file('debug.keystore')
                 storePassword 'android'
                 keyAlias 'androiddebugkey'
                 keyPassword 'android'
+                v1SigningEnabled true
+                v2SigningEnabled true
             }
         }`
 
@@ -25,7 +29,7 @@ module.exports = function withReleaseSigning(config) {
       gradle = gradle.replace(/signingConfigs \{\n/, (m) => `${m}${SIGNING}\n`)
       gradle = gradle.replace(
         /(release \{\n\s*\/\/ Caution![^\n]*\n[^\n]*\n\s*)signingConfig signingConfigs\.debug/,
-        '$1signingConfig signingConfigs.release\n            v1SigningEnabled true\n            v2SigningEnabled true',
+        '$1signingConfig signingConfigs.release',
       )
     }
     cfg.modResults.contents = gradle
