@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Info,
   RotateCcw,
+  ScanSearch,
   Share2,
   ThumbsDown,
   ThumbsUp,
@@ -19,9 +20,10 @@ import {
   XCircle,
 } from '@/components/icons'
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Animated, Easing, Platform, Pressable, Share, StyleSheet, View } from 'react-native'
+import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native'
 
-import { Badge, Text, toast, toastError } from '@/components/ui'
+import { Badge, Button, Text, toast, toastError } from '@/components/ui'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '@/i18n'
 import { haptic } from '@/lib/haptics'
 import { rpc } from '@/lib/hermes'
@@ -35,6 +37,60 @@ import { motion, radius, space, useTheme } from '@/theme'
 import { Markdown } from './Markdown'
 import { RemoteImage } from './RemoteImage'
 import { ToolCard, ToolGroup } from './ToolCard'
+
+/** Fullscreen native text selection sheet allowing users to drag cursor handles across paragraphs without boundary constraints. */
+function TextSelectionModal({
+  visible,
+  text,
+  onClose,
+}: {
+  visible: boolean
+  text: string
+  onClose: () => void
+}) {
+  const { c } = useTheme()
+  const t = useT()
+  const insets = useSafeAreaInsets()
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
+      <View style={[styles.modalRoot, { backgroundColor: c.bg, paddingTop: Math.max(insets.top, 16) }]}>
+        <View style={[styles.modalHeader, { borderBottomColor: c.border }]}>
+          <Text variant="title" weight="semibold">
+            {t('Select text')}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: space.xs, alignItems: 'center' }}>
+            <Button
+              label={t('Copy all')}
+              variant="secondary"
+              size="sm"
+              onPress={async () => {
+                haptic('light')
+                await Clipboard.setStringAsync(text)
+                toast(t('Copied'), 'success')
+              }}
+            />
+            <Button label={t('Close')} variant="ghost" size="sm" onPress={onClose} />
+          </View>
+        </View>
+        <ScrollView
+          style={styles.modalScroll}
+          contentContainerStyle={{ padding: space.lg, paddingBottom: Math.max(insets.bottom, 24) + space.lg }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text
+            variant="body"
+            selectable
+            selectionColor={c.accentSoft}
+            style={{ fontSize: 16, lineHeight: 26, color: c.text }}
+          >
+            {text}
+          </Text>
+        </ScrollView>
+      </View>
+    </Modal>
+  )
+}
 
 function Reasoning({ text, live }: { text: string; live: boolean }) {
   const { c } = useTheme()
@@ -354,8 +410,10 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
 
   const text = textOf(message)
   const lastReasoningIdx = message.parts.map((p) => p.kind).lastIndexOf('reasoning')
+  const [selectModalOpen, setSelectModalOpen] = useState(false)
   return (
     <View style={styles.assistant}>
+      <TextSelectionModal visible={selectModalOpen} text={text} onClose={() => setSelectModalOpen(false)} />
       {message.label ? <Badge label={message.label} tone="info" /> : null}
       {segmentsOf(message.parts).map((seg) => {
         if (seg.kind === 'tools') {
@@ -392,6 +450,18 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
       ) : null}
       {!streaming && text ? (
         <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('Select text')}
+            hitSlop={10}
+            onPress={() => {
+              haptic('select')
+              setSelectModalOpen(true)
+            }}
+            style={styles.action}
+          >
+            <ScanSearch size={15} color={c.textFaint} />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('Copy reply')}
@@ -478,6 +548,16 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
 }
 
 const styles = StyleSheet.create({
+  modalRoot: { flex: 1 },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalScroll: { flex: 1 },
   hit: { borderWidth: 1, borderRadius: radius.md, margin: -space.sm, padding: space.sm - 1 },
   userWrap: { alignItems: 'flex-end', gap: 4, paddingLeft: 48 },
   user: {
