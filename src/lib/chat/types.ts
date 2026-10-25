@@ -28,6 +28,9 @@ export interface ChatMessage {
   interim?: boolean
   /** How long the turn ran, for turns finished while the app watched. */
   elapsedMs?: number
+  /** Tokens per second for this turn. */
+  tps?: number | null
+  usage?: Usage | null
   error?: string | null
   tone?: 'info' | 'warn' | 'error' | 'success'
   /** Paths/names of images queued with this user turn. */

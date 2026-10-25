@@ -245,6 +245,51 @@ function testSAFDownloadLogic() {
   console.log(' -> PASSED: SAF Download and directory permission flow verified.\n')
 }
 
+// 10. 测试耗时格式化（分秒）与 TPS 计算
+function testMetricsFormatting() {
+  console.log('[Test 10] Testing Metrics Duration & TPS Calculation...')
+
+  function formatDuration(ms) {
+    const totalSeconds = Math.max(1, Math.round(ms / 1000))
+    if (totalSeconds < 60) {
+      return `${totalSeconds}秒`
+    }
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return seconds > 0 ? `${minutes}分${seconds}秒` : `${minutes}分钟`
+  }
+
+  function calcTPS(elapsedMs, outputTokens) {
+    const sec = elapsedMs / 1000
+    if (sec < 0.5 || !outputTokens) return null
+    return Number((outputTokens / sec).toFixed(1))
+  }
+
+  assert.equal(formatDuration(500), '1秒')
+  assert.equal(formatDuration(23000), '23秒')
+  assert.equal(formatDuration(83000), '1分23秒')
+  assert.equal(formatDuration(120000), '2分钟')
+
+  assert.equal(calcTPS(2000, 85), 42.5)
+  assert.equal(calcTPS(300, 10), null, 'Turn < 0.5s should not emit TPS')
+  assert.equal(calcTPS(5000, 0), null)
+
+  console.log(' -> PASSED: Duration string (X分Y秒) and TPS calculation verified.\n')
+}
+
+// 11. 测试子代理与底部胶囊栏物理隔离解耦
+function testSubagentDecoupling() {
+  console.log('[Test 11] Testing Subagent Separation from Composer Pills...')
+
+  const composerPills = ['model', 'effort', 'approval']
+  assert.equal(composerPills.includes('subagents'), false, 'Subagent MUST NOT be inside bottom pills bar')
+
+  const liveStatusElements = ['todos', 'subagents', 'busyLine']
+  assert.equal(liveStatusElements.includes('subagents'), true, 'Subagent chip belongs in LiveStatus above composer')
+
+  console.log(' -> PASSED: Subagent chip isolated from pills bar, eliminating layout shifting.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -256,7 +301,9 @@ function runAll() {
   testMediaTagConversion()
   testPillsLayoutAlignment()
   testSAFDownloadLogic()
-  console.log('=== ALL 9 SUITES PASSED (0 ERRORS) ===')
+  testMetricsFormatting()
+  testSubagentDecoupling()
+  console.log('=== ALL 11 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

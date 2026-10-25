@@ -402,12 +402,18 @@ export function handleEvent(event: AnyGatewayEvent) {
                   : p.status === 'interrupted'
                     ? t('Interrupted')
                     : null
+              const elapsedMs = s.turnStartedAt ? Date.now() - s.turnStartedAt : undefined
+              const turnUsage = (p.usage as Usage | undefined) ?? null
+              const elapsedSec = elapsedMs ? elapsedMs / 1000 : 0
+              const tps = elapsedSec >= 0.5 && turnUsage?.output ? Number((turnUsage.output / elapsedSec).toFixed(1)) : null
               finished = {
                 ...m,
                 parts,
                 error,
                 rowId: p.persisted_turn?.final_assistant_row_id ?? m.rowId,
-                elapsedMs: s.turnStartedAt ? Date.now() - s.turnStartedAt : undefined,
+                elapsedMs,
+                usage: turnUsage,
+                tps,
               }
               return finished
             })
