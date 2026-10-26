@@ -758,6 +758,8 @@ export const zh: Record<string, string> = {
   'Preparing {tool}…': '正在准备 {tool}…',
   'Preparing file…': '正在准备文件…',
   Preview: '预览',
+  'Preview anyway': '仍然预览',
+  'This file is not a common text format. It may be large and consume data to preview.': '该文件不是常见文本格式，体积可能较大，直接预览会消耗流量。',
   'Previous 7 days': '过去 7 天',
   'Previous match': '上一个匹配',
   'Primary folder on the backend': '后端上的主文件夹',

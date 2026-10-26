@@ -4,14 +4,15 @@ import { File, Paths } from 'expo-file-system'
 import * as FileSystem from 'expo-file-system/legacy'
 import { Image } from 'expo-image'
 import * as Sharing from 'expo-sharing'
+import { useState } from 'react'
 import { Platform, ScrollView, View } from 'react-native'
 
 import { Markdown } from '@/components/chat/Markdown'
 import { Download, Share2 } from '@/components/icons'
-import { ErrorState, IconButton, Loading, Screen, Text, toast, toastError } from '@/components/ui'
+import { Button, ErrorState, IconButton, Loading, Screen, Text, toast, toastError } from '@/components/ui'
 import { useT } from '@/i18n'
 import { bytes } from '@/lib/format'
-import { hermes, rest } from '@/lib/hermes'
+import { hermes } from '@/lib/hermes'
 import { useRest } from '@/lib/hooks'
 import { radius, space, useTheme } from '@/theme'
 
@@ -26,6 +27,8 @@ export default function DocumentViewerScreen() {
   const { c } = useTheme()
   const params = useLocalSearchParams<{ path?: string }>()
   const rawPath = params.path ? decodeURIComponent(params.path) : ''
+
+  const [allowLargeLoad, setAllowLargeLoad] = useState(false)
 
   // 1. 标准化路径：
   let p = rawPath
@@ -59,21 +62,29 @@ export default function DocumentViewerScreen() {
 
   const fileName = normalized ? normalized.split('/').pop() || normalized : ''
 
+  // 预判文件类型与可能的大小提示
+  const isCodeOrTextExt = /\.(md|txt|py|ts|tsx|js|json|ya?ml|toml|sh|log|ini|cfg|env|rs|go|java|kt|c|h|cpp|css|html|sql|xml|patch|diff)$/i.test(fileName)
+  const isImageExt = /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(fileName)
+  const isLikelyLargeBinary = !isCodeOrTextExt && !isImageExt
+
+  // 超过 5MB 的文件禁止自动请求 base64 /api/files/read，必须由用户主动点击确认
+  const shouldAutoLoad = !isLikelyLargeBinary || allowLargeLoad
+
   const q = useRest<{ data_url: string; mime_type: string; size?: number }>(
     ['file-read', normalized],
     '/api/files/read',
     { path: normalized },
-    { enabled: !!normalized && !isSystemRestricted },
+    { enabled: !!normalized && !isSystemRestricted && shouldAutoLoad },
   )
 
   const mime = q.data?.mime_type ?? ''
   const b64 = q.data?.data_url ? q.data.data_url.slice(q.data.data_url.indexOf(',') + 1) : ''
-  const isLarge = (q.data?.size ?? 0) > 4 * 1024 * 1024
+  const fileSize = q.data?.size ?? 0
+  const isLarge = fileSize > 5 * 1024 * 1024
 
   const isText =
     !isLarge &&
-    (/^text\/|json|yaml|xml|javascript|typescript|x-sh|toml/.test(mime) ||
-      /\.(md|txt|py|ts|tsx|js|json|ya?ml|toml|sh|log|ini|cfg|env|rs|go|java|kt|c|h|cpp|css|html|sql|xml|patch|diff)$/i.test(fileName))
+    (/^text\/|json|yaml|xml|javascript|typescript|x-sh|toml/.test(mime) || isCodeOrTextExt)
 
   let text = ''
   if (isText && b64) {
@@ -84,23 +95,30 @@ export default function DocumentViewerScreen() {
     }
   }
 
-  // 快捷分享
+  // 本地持久化缓存单例文件对象：避免重复下载
+  async function getOrDownloadLocalFile(onProgressText?: string): Promise<File> {
+    const cached = new File(Paths.cache, fileName)
+    if (cached.exists && cached.size > 0) {
+      return cached
+    }
+    if (onProgressText) toast(onProgressText, 'info')
+    const url = hermes().rest.url('/api/files/download', { path: normalized })
+    return await File.downloadFileAsync(url, cached, { headers: await hermes().authHeaders() })
+  }
+
+  // 快捷分享（优先复用已下载缓存）
   async function share() {
     if (!normalized || isSystemRestricted) return
     try {
       if (Platform.OS === 'web') return toast(t('Sharing is available in the Android app.'), 'info')
-      const dest = new File(Paths.cache, fileName)
-      if (dest.exists) dest.delete()
-      const url = hermes().rest.url('/api/files/download', { path: normalized })
-      toast(t('Preparing file…'), 'info')
-      const file = await File.downloadFileAsync(url, dest, { headers: await hermes().authHeaders() })
+      const file = await getOrDownloadLocalFile(t('Preparing file…'))
       await Sharing.shareAsync(file.uri, { mimeType: mime || undefined })
     } catch (e) {
       toastError(e)
     }
   }
 
-  // 真正的文件落盘保存（利用 Android SAF 存储访问框架保存到手机公共存储，如 Download 目录）
+  // 真正的文件落盘保存（保存到外部公共存储 Downloads 目录）
   const SAVED_SAF_DIR_KEY = 'hermes_download_saf_dir_uri'
 
   async function download() {
@@ -108,24 +126,42 @@ export default function DocumentViewerScreen() {
     try {
       if (Platform.OS === 'web') return toast(t('Downloading is available in the Android app.'), 'info')
 
-      toast(t('Downloading {name}…', { name: fileName }), 'info')
+      // 1. 获取或流式下载本地缓存（如果已经下载过，零网络请求秒级读取）
+      const localFile = await getOrDownloadLocalFile(t('Downloading {name}…', { name: fileName }))
 
-      // 1. 流式下载到应用内部专用缓存目录（File.downloadFileAsync 经底层 C++ OkHttp 直写，零 OOM 且原生兼容）
-      const tempDest = new File(Paths.cache, fileName)
-      if (tempDest.exists) tempDest.delete()
-      const url = hermes().rest.url('/api/files/download', { path: normalized })
-      const downloadedFile = await File.downloadFileAsync(url, tempDest, { headers: await hermes().authHeaders() })
+      // 2. 检查是否有已保存授权的外部 SAF 目录
+      let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
+      let targetFileUri: string | null = null
+      const fileMime = mime || 'application/octet-stream'
 
-      // 2. 检查系统是否支持分享，直接通过系统的原生文件保存 / 分享面板呼出（系统自带“保存到文件” / “保存到相册” / “微信”等原生选项）
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(downloadedFile.uri, {
-          mimeType: mime || undefined,
-          dialogTitle: t('Save or share {name}', { name: fileName }),
-        })
-        toast(t('Saved to device: {name}', { name: fileName }), 'success')
-      } else {
-        toast(t('Sharing is not available on this device.'), 'warn')
+      if (targetDirUri) {
+        try {
+          targetFileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
+        } catch {
+          targetDirUri = null
+          await AsyncStorage.removeItem(SAVED_SAF_DIR_KEY)
+        }
       }
+
+      // 3. 若无有效目录，唤起系统目录授权选择器（用户可选择系统 Downloads 文件夹）
+      if (!targetFileUri) {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync()
+        if (!permissions.granted) {
+          return
+        }
+        targetDirUri = permissions.directoryUri
+        await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
+        targetFileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
+      }
+
+      // 4. 将本地已下载的缓存文件直接写入外部目标 URI
+      // 使用 Base64 分块流式或者 writeAsStringAsync 保证真实落盘到系统公共存储
+      const b64Data = await localFile.base64()
+      await FileSystem.writeAsStringAsync(targetFileUri, b64Data, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+
+      toast(t('Saved to device: {name}', { name: fileName }), 'success')
     } catch (e) {
       toastError(e)
     }
@@ -163,6 +199,21 @@ export default function DocumentViewerScreen() {
               'This path is outside the safe file root (/opt/data). For security reasons, the server only allows viewing and downloading files within the workspace.',
             )}
           </Text>
+        </View>
+      ) : null}
+
+      {!shouldAutoLoad ? (
+        <View style={{ padding: space.xl, alignItems: 'center', gap: space.md, marginTop: space.xxl }}>
+          <Text weight="semibold" variant="title">
+            {fileName}
+          </Text>
+          <Text tone="muted" style={{ textAlign: 'center' }}>
+            {t('This file is not a common text format. It may be large and consume data to preview.')}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: space.md, marginTop: space.sm }}>
+            <Button label={t('Preview anyway')} variant="secondary" onPress={() => setAllowLargeLoad(true)} />
+            <Button label={t('Download')} variant="primary" icon={Download} onPress={download} />
+          </View>
         </View>
       ) : null}
 
