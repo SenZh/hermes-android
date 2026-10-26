@@ -177,3 +177,60 @@
 - **P2**：修订 contract.md 的 C4/C8 措辞并回填 C1-C9 结果列；`test-cases.md` 用脚本反向生成；#22 补齐未执行项。
 
 补完 P0+P1 后，建议把 Test 23 的九组断言按"每个契约一条"重新编号并在报告里列 ID 到断言的映射，否则下一轮审查仍无法逐条对账。
+
+---
+
+## 五、主 Agent 裁决
+
+### 5.1 审查质量校验
+
+| 检视项 | 结果 | 说明 |
+|-------|------|------|
+| 每个发现是否有引用位置 | ✅ 23/23 | 全部带文件行号 / 用例 ID / 契约编号 |
+| 是否有可复现证据 | ✅ 优 | 用隔离目录做源码变异（mutation），逐条给出"改后仍全绿"的实证，而非纸上推断 |
+| 维度覆盖 | ✅ 6/6 | 契约覆盖度逐条对照 + 用例充分性 + 自证检查 + 门禁可绕过性 + 数字自洽 + 未覆盖风险诚实性 |
+| 严重度区分 | ✅ | 严重 5 / 高 9 / 中 5 / 低 4 |
+
+**审查有效性：通过。这是本次变更里质量最高的一次审查** —— 它没有停留在"断言存在吗"，而是实际把代码改坏再看门禁是否变红。
+
+### 5.2 裁决：驳回成立
+
+无法反驳。最硬的一条是 #1（M17）：把 `stopOrDefer()` 改回无条件 `stopSelf()`，23 个套件全绿。那正是本次崩溃的形态。等于"这次修的 Bug 可以被无声改回去"，直接违反 `AGENTS.md`「每次 Bug 修复必须新增一个对抗该 Bug 的真实用例」。
+
+第二条同样成立：#13（M14/M15）——我在自审里标为"高"的两个 JS 修复（模块级时间戳、退避唤醒 timer）**零断言**。自己标了高危却不写用例，是自审失职。
+
+### 5.3 处置
+
+| 审查项 | 处置 | 具体动作 |
+|-------|------|---------|
+| #1 M17（stopOrDefer 无门禁） | ✅ 已修 | 新增 Robolectric 行为测试 `KeepAliveServiceTest.kt`：`stopping while not yet promoted is deferred instead of executed` 直接断言 `isStoppedBySelf == false` 且 `stopRequested == true`。变异为无条件 stopSelf 后该测试必红 |
+| #4 M10（删 `state=RUNNING` 全绿） | ✅ 已修 | 同一测试断言 `state == RUNNING` |
+| #5 M4（`if (SDK_INT>=99)` 包住 startForeground） | ✅ 已修 | Robolectric 以 SDK 34 跑真实 `onStartCommand`，条件不满足则 `lastForegroundNotification == null`，测试必红 |
+| #6 M6b（helper 间接 stopService） | ✅ 已修 | Robolectric 断言的是 `isStoppedBySelf` 这一**行为结果**，不再依赖源码文本 |
+| #7 M2（preflight 返回值反转全绿） | ✅ 已修 | verify-fixes 增加 `/\return manager\.getNotificationChannel\(CHANNEL_ID\) != null/` 断言；另加 Robolectric `preflight fails when the channel cannot be resolved` |
+| #8 M7（反转冷却门全绿） | ✅ 已修 | 把整个启动决策抽成纯函数 `keepAlivePolicy.decideStart`，TurnEffects 只执行决策；新增 8 条 vitest 用例覆盖冷却边界（10300 放行 / 10299 等待）、退避、后台优先序、running 短路。"反转冷却门"会直接让 `TC-KA-25/28` 变红 |
+| #13 M14/M15（JS 侧零断言） | ✅ 已修 | 同 #8：决策逻辑下沉后，"等待必须能被唤醒"由 `decision.action === 'wait'` + `delayMs` 断言覆盖；verify-fixes 增加"wait 分支必须被处理"的接线断言 |
+| #9 M9（WATCHDOG_MS 改 60000 全绿） | ✅ 已修 | verify-fixes 增加 `WATCHDOG_MS = 4000L` 断言 |
+| #13 M13（`pickCreatedEntry` 换成 null 全绿） | ✅ 已修 | verify-fixes 增加 `pickCreatedEntry(beforeNames, after, finalTargetName)` 的真实调用断言 |
+| #2/#3（Test 1–20 多为自证） | ⏳ 部分处理 | 本轮单独重写了 Test 20 之外的 19 个历史套件**不在本次变更范围内**（它们是既有代码的历史债）。已确认为技术债并记入 `summary.md` 遗留项。本轮新增的 Test 21/22/23 全部 `readFileSync` 读生产源码，不自证 |
+| #20（Test 18 未 await） | ⏳ 遗留 | 属历史套件，同上 |
+| #15/#16/#17（契约措辞、结果列回填、用例清单反向生成） | ✅ 已修 | `test-cases.md` 补 TC-KA-22~29 / TC-DL-19~22；`test-plan.md` 门槛改为实测 71 / 23；`contract.md` 结果列在 `summary.md` 统一回填 |
+| #21/#23（A3/A7 判据不稳） | ⏳ 遗留 | 非阻断，记入遗留 |
+
+### 5.4 关于 CI 接入的如实说明
+
+Robolectric 测试已写好并随代码提交，但 `.github/workflows/android.yml` 的接入步骤**未能提交**：当前 GitHub PAT 缺少 `workflow` scope，推送被 GitHub 拒绝（`refusing to allow a Personal Access Token to create or update workflow ... without workflow scope`）。
+
+因此现状是：**Kotlin 行为测试代码在仓库里，但 CI 尚未执行它**。需要一段具备 workflow scope 的凭据补上这 5 行：
+
+```yaml
+      - name: Module unit tests (Robolectric)
+        run: ./gradlew :hermes-keepalive:testDebugUnitTest --no-daemon --stacktrace
+        working-directory: android
+```
+
+在这条接入之前，`KeepAliveServiceTest.kt` 属于"已写未跑"，**不得计入已验证**。这一点同步记入 `summary.md` 的遗留问题与 `test-result.md` 的未执行项。
+
+### 5.5 裁决结论
+
+**准入：有条件通过。** 条件就是上述 CI 接入——代码与测试都已就位，缺的是让它们真的在流水线里跑起来。在补齐之前，任何"闪退已修复"的说法都只到静态与 JVM 逻辑层，不到运行时。

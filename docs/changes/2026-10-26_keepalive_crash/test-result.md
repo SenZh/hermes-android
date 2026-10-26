@@ -13,13 +13,13 @@
 
 | 总用例数 | 通过 | 失败 | 跳过 | 通过率 |
 |---------|------|------|------|-------|
-| 86（63 vitest + 23 verify 套件） | 86 | 0 | 0 | 100% |
+| 94（71 vitest + 23 verify 套件 + 0 Robolectric） | 94 | 0 | 0 | 100% |
 
 | 门禁 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | ✅ 0 错误 |
 | `node scripts/check-i18n.mjs` | ✅ zh: ok |
-| vitest 单元测试 | ✅ 8 文件 / 63 项通过 |
+| vitest 单元测试 | ✅ 8 文件 / 71 项通过 |
 | verify-fixes 套件 | ✅ 23/23 通过（`ALL 23 SUITES PASSED (0 ERRORS)`） |
 
 ## 三、本轮新增/变更用例
@@ -55,3 +55,14 @@
 - 不能声称"Kotlin 改动编译通过" —— 未经编译。
 - 不能声称"闪退已修复并经真机验证" —— 只有静态与逻辑层证据。
 - 不能声称"下载覆盖与重进识别已修复" —— H1 的根因（伪子 URI）已按 AOSP 语义修正为 `copy(Directory)`，但真机行为未验证。
+
+## 七、补充执行（测试审查整改后）
+
+| 门禁 | 结果 |
+|------|------|
+| vitest | ✅ 8 文件 / **71** 项（新增 8 项 `decideStart` 分支用例） |
+| verify-fixes | ✅ **23** 套件（Test 23 扩到 12 组断言） |
+| Robolectric（`KeepAliveServiceTest.kt`） | ⚠️ **已写未跑** —— CI 接入步骤因 PAT 缺 `workflow` scope 未能提交 |
+| CI `check` job（commit `507a75c`） | ✅ 通过，与本地一致 |
+
+**Robolectric 的 8 项测试不计入上面的 94 项**，因为它们在本地无法执行、在 CI 里也尚未被调用。在接入 CI 之前，`KeepAliveServiceTest.kt` 的存在不构成任何运行证据。
