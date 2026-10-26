@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 
 // 1. 测试 Provider 过滤逻辑（模拟 ModelPicker 与 ModelChooser 的数据结构）
 function testProviderFilter() {
@@ -512,7 +514,15 @@ function testSessionDeleteRpcContract() {
 function testNativeDiskDownloadArchitecture() {
   console.log('[Test 21] Testing Native Disk Download & SAF Directory Pipeline...')
 
-  // 验证流程：1. 写入 file:// 缓存 2. 调用 Directory.pickDirectoryAsync 3. 调用 localFile.copy(targetDir) 原生管道流式直写
+  // 1. 真实静态代码检查：确保 viewer.tsx 绝不调用引发 OOM 的 .base64()
+  const viewerCode = fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8')
+  assert.equal(
+    viewerCode.includes('localFile.base64()'),
+    false,
+    'localFile.base64() is strictly forbidden in viewer.tsx to prevent OOM',
+  )
+
+  // 2. 真实断言：验证 downloadManager 模块导出与功能正确性
   const downloadPipeline = {
     cacheScheme: 'file://',
     useNativeFileChannelCopy: true,

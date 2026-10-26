@@ -8,12 +8,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { SessionRow } from '@/app/(tabs)/sessions'
 import { HermesMark } from '@/components/HermesMark'
 import {
+  ArrowUpCircle,
   Bot,
   CalendarClock,
   Check,
   ChevronDown,
   ChevronUp,
   History as HistoryIcon,
+  Info,
   LayoutGrid,
   PenSquare,
   Pin,
@@ -24,7 +26,7 @@ import {
 } from '@/components/icons'
 import type { LucideIcon } from '@/components/icons'
 import { switchProfile, useProfiles } from '@/components/ProfileSwitcher'
-import { Chip, Text, toast, toastError } from '@/components/ui'
+import { Chip, Text, VersionModal, toast, toastError } from '@/components/ui'
 import { useT } from '@/i18n'
 import { previewText } from '@/lib/chat/history'
 import { relativeTime, sourceLabel } from '@/lib/format'
@@ -53,6 +55,7 @@ export function ChatDrawer({ onClose }: { onClose: () => void }) {
   const profiles = useProfiles()
   const currentProfile = activeConn?.profile ?? null
   const [backendsOpen, setBackendsOpen] = useState(false)
+  const [versionModalOpen, setVersionModalOpen] = useState(false)
   const [q, setQ] = useState('')
   const activeStored = useChat((s) => (s.activeId ? s.sessions[s.activeId]?.storedId : null))
 
@@ -241,60 +244,27 @@ export function ChatDrawer({ onClose }: { onClose: () => void }) {
           <DrawerNavItem
             icon={Settings2}
             label={t('Settings')}
-            hasBadge={updateInfo?.hasUpdate}
             onPress={() => {
               onClose()
               router.navigate('/more')
             }}
           />
+          <DrawerNavItem
+            icon={updateInfo?.hasUpdate ? ArrowUpCircle : Info}
+            label={updateInfo?.hasUpdate ? t('Update') : t('Info')}
+            hasBadge={updateInfo?.hasUpdate}
+            badgeColor={c.accent}
+            iconColor={updateInfo?.hasUpdate ? c.accent : undefined}
+            onPress={() => setVersionModalOpen(true)}
+          />
         </View>
-
-        {/* 版本信息与检查更新栏 */}
-        <Pressable
-          accessibilityRole="button"
-          onPress={async () => {
-            if (updateInfo?.hasUpdate && updateInfo.downloadUrl) {
-              void Linking.openURL(updateInfo.downloadUrl)
-            } else {
-              try {
-                toast(t('Checking for updates…'), 'info')
-                const res = await checkUpdate(false)
-                if (res?.hasUpdate && res.downloadUrl) {
-                  toast(t('New version available: {ver}', { ver: res.latestVersion }), 'success')
-                  void Linking.openURL(res.downloadUrl)
-                } else {
-                  toast(t('Already up to date'), 'success')
-                }
-              } catch (e) {
-                toastError(e)
-              }
-            }
-          }}
-          style={({ pressed }) => [
-            styles.versionBar,
-            { backgroundColor: pressed ? c.surfaceAlt : 'transparent' },
-          ]}
-        >
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-              <Text variant="caption" tone="muted">
-                {t('App')}: v{Constants.expoConfig?.version ?? '1.8.3'}
-              </Text>
-              {updateInfo?.hasUpdate ? (
-                <View style={[styles.updateBadge, { backgroundColor: c.accent }]}>
-                  <Text variant="caption" style={{ color: '#fff', fontSize: 10, lineHeight: 12 }}>
-                    NEW
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <Text variant="caption" tone="faint" numberOfLines={1}>
-              {t('Gateway')}: {health.data?.displayVersion ?? health.data?.version ?? '—'}
-            </Text>
-          </View>
-          <RefreshCw size={14} color={checkingUpdate ? c.accent : c.textFaint} />
-        </Pressable>
       </View>
+
+      <VersionModal
+        visible={versionModalOpen}
+        onClose={() => setVersionModalOpen(false)}
+        gatewayVersion={health.data?.displayVersion || health.data?.version}
+      />
     </View>
   )
 }
@@ -303,11 +273,15 @@ function DrawerNavItem({
   icon: Icon,
   label,
   hasBadge,
+  badgeColor,
+  iconColor,
   onPress,
 }: {
   icon: LucideIcon
   label: string
   hasBadge?: boolean
+  badgeColor?: string
+  iconColor?: string
   onPress: () => void
 }) {
   const { c } = useTheme()
@@ -319,10 +293,10 @@ function DrawerNavItem({
       style={({ pressed }) => [styles.navItem, { backgroundColor: pressed ? c.surfaceAlt : 'transparent' }]}
     >
       <View style={{ position: 'relative' }}>
-        <Icon size={18} color={c.textMuted} strokeWidth={1.75} />
-        {hasBadge ? <View style={[styles.badgeDot, { backgroundColor: c.accent }]} /> : null}
+        <Icon size={18} color={iconColor ?? c.textMuted} strokeWidth={1.75} />
+        {hasBadge ? <View style={[styles.badgeDot, { backgroundColor: badgeColor ?? c.accent }]} /> : null}
       </View>
-      <Text variant="caption" tone="muted">
+      <Text variant="caption" tone={iconColor ? 'accent' : 'muted'} style={iconColor ? { color: iconColor } : undefined}>
         {label}
       </Text>
     </Pressable>
