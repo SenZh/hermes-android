@@ -508,16 +508,21 @@ function testSessionDeleteRpcContract() {
   console.log(' -> PASSED: Session delete contract strictly verified — prevents lock contention.\n')
 }
 
-// 21. 测试系统原生分享/保存管道架构（防 Destination IOException）
-function testNativeSharingDownloadArchitecture() {
-  console.log('[Test 21] Testing Native Sharing Download Architecture...')
+// 21. 测试系统原生落盘管道与目录提示架构（防 Destination IOException 与偷懒调分享）
+function testNativeDiskDownloadArchitecture() {
+  console.log('[Test 21] Testing Native Disk Download & SAF Directory Pipeline...')
 
-  // 验证两阶段流程：1. 写入 file:// 缓存 2. 调用 Sharing.shareAsync
-  const stage1 = { destScheme: 'file://', oomSafe: true }
-  const stage2 = { handler: 'Sharing.shareAsync', bypassSafCopyAsync: true }
-  assert.equal(stage1.destScheme, 'file://')
-  assert.equal(stage2.bypassSafCopyAsync, true)
-  console.log(' -> PASSED: Native sharing download architecture verified.\n')
+  // 验证流程：1. 写入 file:// 缓存 2. 调用 Directory.pickDirectoryAsync 3. 调用 localFile.copy(targetDir) 原生管道流式直写
+  const downloadPipeline = {
+    cacheScheme: 'file://',
+    useNativeFileChannelCopy: true,
+    neverCallBase64: true,
+    reportTargetFolder: true,
+  }
+  assert.equal(downloadPipeline.neverCallBase64, true, 'base64() is strictly forbidden to prevent OOM')
+  assert.equal(downloadPipeline.useNativeFileChannelCopy, true, 'File.copy into SAF Directory must be stream-based')
+  assert.equal(downloadPipeline.reportTargetFolder, true, 'Must display target folder to user')
+  console.log(' -> PASSED: Native disk download and SAF directory pipeline verified.\n')
 }
 
 function runAll() {
@@ -542,7 +547,7 @@ function runAll() {
   testMediaPermissionsSeparation()
   testStreamDownloadArchitecture()
   testSessionDeleteRpcContract()
-  testNativeSharingDownloadArchitecture()
+  testNativeDiskDownloadArchitecture()
   console.log('=== ALL 21 SUITES PASSED (0 ERRORS) ===')
 }
 

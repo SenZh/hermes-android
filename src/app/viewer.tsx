@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { File, Paths } from 'expo-file-system'
+import { Directory, File, Paths } from 'expo-file-system'
 import * as FileSystem from 'expo-file-system/legacy'
 import { Image } from 'expo-image'
 import * as Sharing from 'expo-sharing'
@@ -118,6 +118,9 @@ export default function DocumentViewerScreen() {
     }
   }
 
+  // 真正的文件落盘保存（保存到外部公共存储 Downloads 目录）
+  const SAVED_SAF_DIR_KEY = 'hermes_download_saf_dir_uri'
+
   async function download() {
     if (!normalized || isSystemRestricted) return
     try {
@@ -126,18 +129,37 @@ export default function DocumentViewerScreen() {
       // 1. 获取或流式下载本地缓存（如果已经下载过，零网络请求秒级读取）
       const localFile = await getOrDownloadLocalFile(t('Downloading {name}…', { name: fileName }))
 
-      // 2. 利用系统级的保存与分享面板（系统原生支持直接选择“保存到文件” / “保存到下载” / “保存到微信”）
-      // 绝对不调用任何 base64() 或读入 JS 内存，彻底杜绝 OOM 内存溢出
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(localFile.uri, {
-          mimeType: mime || undefined,
-          dialogTitle: t('Save or share {name}', { name: fileName }),
-        })
-        toast(t('Saved to device: {name}', { name: fileName }), 'success')
-      } else {
-        toast(t('Sharing is not available on this device.'), 'warn')
+      // 2. 选择或读取已授权的外部目录
+      let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
+      if (!targetDirUri) {
+        const picked = await Directory.pickDirectoryAsync()
+        if (!picked || !picked.uri) return
+        targetDirUri = picked.uri
+        await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
       }
-    } catch (e) {
+
+      toast(t('Saving to disk…'), 'info')
+      const targetDir = new Directory(targetDirUri)
+      
+      // 3. 利用 expo-file-system 官方新架构 File.copy() 原生底核流式拷贝
+      // 底层由 Java/Kotlin FileSystemModule.copy -> DestinationSink.SAF 直接通过 FileChannel 写入 SAF Content-URI
+      // 绝不经过 JS 内存，绝无 Base64，彻底根除 OOM！
+      await localFile.copy(targetDir)
+
+      // 解析用户可读的目录名称并友好展示
+      let displayFolder = 'Downloads'
+      try {
+        const decoded = decodeURIComponent(targetDirUri)
+        const parts = decoded.split(':')
+        if (parts.length > 1) {
+          displayFolder = parts[parts.length - 1]
+        }
+      } catch {}
+
+      toast(t('Saved to {folder}: {name}', { folder: displayFolder, name: fileName }), 'success')
+    } catch (e: any) {
+      // 若原授权目录失效，清除缓存让用户下次重新选择
+      await AsyncStorage.removeItem(SAVED_SAF_DIR_KEY)
       toastError(e)
     }
   }

@@ -903,6 +903,8 @@ export const zh: Record<string, string> = {
   'Saved on the backend': '已保存到后端',
   'Saved on the backend; share it to clone this agent elsewhere': '已保存到后端；分享它即可在其他地方克隆此代理',
   'Saved to device: {name}': '已保存到手机：{name}',
+  'Saved to {folder}: {name}': '已保存到 {folder}：{name}',
+  'Saving to disk…': '正在保存到本地磁盘…',
   'Saved to the vault': '已保存到凭据库',
   'Saved to {file}': '已保存到 {file}',
   'Saved {key}': '已保存 {key}',

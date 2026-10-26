@@ -1,8 +1,14 @@
 # 更新日志 (Changelog)
 
-## [v1.8.3-preview.14] - 2026-10-26
+## [v1.8.3-preview.15] - 2026-10-26
 
 ### 🚀 新增功能 (Features)
+- **真·独立落盘与目标目录明确提示**：
+  - 彻底将【下载】与【分享】解耦：
+    - 点击【下载】：不再偷懒唤起系统分享面板，而是调用 `Directory.pickDirectoryAsync()` 弹出系统目录选择器，由用户指定保存位置（如 Downloads 或自定义文件夹）；
+    - 流式落盘：直接通过新架构 `localFile.copy(targetDir)` 借助底核 `FileChannel` 直写 SAF Content-URI，零 Base64 介入，零 OOM 风险；
+    - 明确目录反馈：下载完成后弹出准确提示：`已保存到 Downloads：<文件名>`，让用户清楚知道文件下载到了哪里。
+    - 点击【分享】：专门唤起系统级应用互传面板（发送到微信、蓝牙传输等）。
 - **彻底根除下载 OOM：零内存 Base64 触碰**：
   - 根因：此前下载时调用了 `localFile.base64()`，试图将 82MB 的 APK 读进 JS 内存转成 Base64 字符串（瞬间申请 220MB 连续内存），引发 `java.lang.OutOfMemoryError`。
   - 修复：彻底剔除 `base64()` 与任何 JS 内存暂存逻辑，完全交由原生流式管道接管，零内存膨胀，彻底根除 OOM。
