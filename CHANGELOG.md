@@ -1,6 +1,6 @@
 # 更新日志 (Changelog)
 
-## [v1.8.3-preview.10] - 2026-10-26
+## [v1.8.3-preview.11] - 2026-10-26
 
 ### 🚀 新增功能 (Features)
 - **版本号信息与自动检查更新**：
@@ -23,6 +23,9 @@
     - 平均 TPS：优先读取后端结算的 Token 吞吐率，缺失时基于输出文本长度与耗时做智能估算保底（如 `42.5 tok/s`），确保每一轮新回答稳定展示。
 
 ### 🛠 体验优化与缺陷修复 (Fixes & Improvements)
+- **全面建立全自动化测试防御门禁 (52 项测试全绿)**：
+  - 抽离核心逻辑至独立模块 `src/lib/metrics.ts`，建立真实 Vitest 自动化单元测试；
+  - 统一 CI 门禁，将 31 项单元测试与 21 项回归套件整合进 `npm test`，实现秒级本地自测与 CI 强制阻断防腐。
 - **重构会话删除：彻底消除 `Exclusive maintenance refused` 报错**：
   - 根因：后端 REST 批量删除接口专供离线维护使用，与常驻网关抢占 `exclusive_maintenance` 独占锁失败。
   - 修复：全面切至实时长连接在线网关协议 `rpc().request('session.delete', { session_id, profile })`，由网关自身执行删除，彻底杜绝锁冲突。
