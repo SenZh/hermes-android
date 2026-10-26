@@ -6,7 +6,7 @@ import { Image } from 'expo-image'
 import * as Linking from 'expo-linking'
 import * as Sharing from 'expo-sharing'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Platform, ScrollView, View } from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 
 import { Markdown } from '@/components/chat/Markdown'
 import { CheckCircle2, Download, ExternalLink, FileText, FolderOpen, Share2 } from '@/components/icons'
@@ -26,6 +26,7 @@ import {
   type StoredDownloadRecord,
 } from '@/lib/downloadManager'
 import { KeepAlive } from '../../modules/hermes-keepalive'
+import { ZoomableImage } from '@/components/ZoomableImage'
 import { radius, space, useTheme } from '@/theme'
 
 function decodeBase64Utf8(b64: string) {
@@ -105,6 +106,7 @@ export default function DocumentViewerScreen() {
   const [downloadSpeed, setDownloadSpeed] = useState('')
   const [downloadBytesWritten, setDownloadBytesWritten] = useState(0)
   const [downloadTotalBytes, setDownloadTotalBytes] = useState(0)
+  const [imageFullscreen, setImageFullscreen] = useState(false)
 
   const isMountedRef = useRef(true)
   useEffect(() => {
@@ -580,7 +582,9 @@ export default function DocumentViewerScreen() {
       {q.error ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : null}
 
       {mime.startsWith('image/') && q.data ? (
-        <Image source={{ uri: q.data.data_url }} style={{ width: '100%', aspectRatio: 1, borderRadius: radius.md }} contentFit="contain" />
+        <View style={{ width: '100%', aspectRatio: 1, borderRadius: radius.md, overflow: 'hidden' }}>
+          <ZoomableImage uri={q.data.data_url} onSingleTap={() => setImageFullscreen(true)} />
+        </View>
       ) : null}
 
       {isText && text ? (
@@ -608,6 +612,20 @@ export default function DocumentViewerScreen() {
       {q.data && !isText && !isLarge && !mime.startsWith('image/') ? (
         <View style={{ padding: space.lg, alignItems: 'center' }}>
           <Text tone="muted">{t('No preview for {mime}.', { mime: mime || t('this file type') })}</Text>
+        </View>
+      ) : null}
+
+      {/* 全屏图片：单击退出，捏合/双击缩放，放大后拖动 */}
+      {imageFullscreen && q.data ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', zIndex: 100 }]}>
+          <ZoomableImage uri={q.data.data_url} background="#000" onSingleTap={() => setImageFullscreen(false)} />
+          <Pressable
+            onPress={() => setImageFullscreen(false)}
+            hitSlop={12}
+            style={{ position: 'absolute', top: 48, right: 20, padding: 8 }}
+          >
+            <Text style={{ color: '#fff', fontSize: 15 }}>{t('Done')}</Text>
+          </Pressable>
         </View>
       ) : null}
     </Screen>

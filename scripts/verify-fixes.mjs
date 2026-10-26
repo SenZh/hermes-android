@@ -798,6 +798,52 @@ function testVendorRomAdaptation() {
   console.log(' -> PASSED: Vendor ROM adaptation verified across four folder fallbacks and five vendors.\n')
 }
 
+function testImageViewerGestures() {
+  console.log('[Test 25] Testing Image Viewer (pinch zoom / pan / fullscreen toggle)...')
+  const viewer = fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8')
+  const component = fs.readFileSync(path.resolve('src/components/ZoomableImage.tsx'), 'utf-8')
+  const lib = fs.readFileSync(path.resolve('src/lib/imageZoom.ts'), 'utf-8')
+
+  // 图片必须走手势组件，不能是裸 Image —— 裸 Image 只能 contain 显示，捏合无反应
+  assert.ok(
+    /mime\.startsWith\('image\/'\)[\s\S]{0,300}?<ZoomableImage/.test(viewer),
+    'images must render through ZoomableImage, not a bare static Image',
+  )
+  assert.ok(
+    viewer.includes('imageFullscreen') && viewer.includes('setImageFullscreen(true)'),
+    'single tap must be able to enter fullscreen',
+  )
+  assert.ok(
+    viewer.includes('setImageFullscreen(false)'),
+    'fullscreen must be exitable',
+  )
+
+  // 三种手势缺一不可
+  assert.ok(component.includes('Gesture.Pinch()'), 'pinch-to-zoom must be wired')
+  assert.ok(component.includes('Gesture.Pan()'), 'panning a zoomed image must be wired')
+  assert.ok(component.includes('Gesture.Tap()'), 'tap gestures must be wired')
+  assert.ok(
+    component.includes('numberOfTaps(2)') && component.includes('numberOfTaps(1)'),
+    'double tap and single tap must both be declared (exclusive, or single fires after double)',
+  )
+  assert.ok(
+    component.includes('Gesture.Exclusive(doubleTap, singleTap)'),
+    'single tap must be exclusive with double tap, otherwise one tap also triggers the double-tap branch',
+  )
+  assert.ok(
+    component.includes('runOnJS'),
+    'turning a UI-thread tap into a React state change requires runOnJS',
+  )
+
+  // 手势回调不得自己做魔法数字，必须走纯函数
+  for (const fn of ['clampScale', 'clampTranslation', 'nextDoubleTapScale', 'resolveSingleTap', 'shouldSnapBack']) {
+    assert.ok(lib.includes(`export function ${fn}`), `imageZoom must export ${fn}`)
+    assert.ok(component.includes(fn), `ZoomableImage must delegate to ${fn}`)
+  }
+
+  console.log(' -> PASSED: Pinch/pan/tap gestures delegate to pure, unit-tested logic.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -823,7 +869,8 @@ function runAll() {
   testSavedStateReplacesDownloadEntry()
   testKeepAliveForegroundOrdering()
   testVendorRomAdaptation()
-  console.log('=== ALL 23 SUITES PASSED (0 ERRORS) ===')
+  testImageViewerGestures()
+  console.log('=== ALL 24 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()
