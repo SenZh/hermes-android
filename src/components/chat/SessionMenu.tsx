@@ -32,7 +32,7 @@ import { addSystemMessage, closeRuntime, loadHistory, openStored, runSlash, useC
 import { confirm, prompt, Row, Section, Sheet, Text, toast, toastError, ToggleRow } from '@/components/ui'
 import { useT } from '@/i18n'
 import type { ChatSession } from '@/lib/chat/types'
-import { rest, rpc } from '@/lib/hermes'
+import { hermes, rest, rpc } from '@/lib/hermes'
 import { space } from '@/theme'
 
 // Built-in personalities from hermes_cli/personality.py.
@@ -357,7 +357,8 @@ export function SessionMenu({ visible, onClose, session, onPickModel, onPickReas
               const stored = session.storedId
               await closeRuntime(sid)
               if (stored) {
-                await rest().post('/api/sessions/bulk-delete', { ids: [stored] })
+                const profile = hermes().profile ?? 'default'
+                await rest().post('/api/sessions/bulk-delete', { ids: [stored], profile })
               }
               toast(t('Deleted'), 'success')
             })}

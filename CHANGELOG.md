@@ -1,6 +1,6 @@
 # 更新日志 (Changelog)
 
-## [v1.8.3-preview.7] - 2026-10-26
+## [v1.8.3-preview.8] - 2026-10-26
 
 ### 🚀 新增功能 (Features)
 - **版本号信息与自动检查更新**：
@@ -23,14 +23,15 @@
     - 平均 TPS：优先读取后端结算的 Token 吞吐率，缺失时基于输出文本长度与耗时做智能估算保底（如 `42.5 tok/s`），确保每一轮新回答稳定展示。
 
 ### 🛠 体验优化与缺陷修复 (Fixes & Improvements)
+- **修复会话删除 `requires an explicit profile` 报错**：
+  - 在会话删除请求（`POST /api/sessions/bulk-delete`）中显式挂载当前所处 `profile`（未指定默认使用 `default`），解决多配置档网关的排他性校验拦截，彻底消除删除报错。
+- **重构 SAF 下载通道（解决 `Directory doesn't exist` 报错）**：
+  - 根因：Expo 的 `downloadAsync` 只接受 `file://` 真实路径，传 `content://`（SAF 目录）会触发 Android 内部目录检测抛出 `IOException: Directory doesn't exist`。
+  - 修复：采用两阶段架构：先由 C++ 底层将网络文件安全流式直写到私有缓存 `file://`（零 OOM），再通过原生 `copyAsync` 直接流式复制到用户授权的 SAF `content://` 目标文件，既防 OOM 又彻底消除路径异常。
 - **相册/照片库权限拦截与调用修复**：
   - 补齐 Android 原生动态相册授权检查 `requestMediaLibraryPermissionsAsync()`，彻底修复相册唤起崩溃问题。
-- **重构流式下载，彻底根除 OOM**：
-  - 文件下载直接通过底层 `FileSystem.downloadAsync` 流式落盘写入公共存储目标 URI，不在 JS 运行时内存中加载巨型 Base64 字符串，彻底消除几十兆大文件下载时的 OOM（内存溢出）崩溃。
 - **分享交互响应速度优化**：
   - 点击分享时增加即时轻量 Toast（`正在准备文件…`），文件下载就绪后秒级拉起系统分享面板。
-- **重构会话删除逻辑，彻底消除 `not_found` 报错**：
-  - 统一调用后端 `/api/sessions/bulk-delete` 批量删除事务接口，后端底层由 SessionDB 自动解析压缩链并安全清理，彻底消除单条 DELETE 的栅栏冲突与 `not_found` 异常。
 - **安装包双重签名修复 (v1 + v2 全兼容)**：
   - 在 `signingConfigs.release` 强制开启 `v1SigningEnabled` 与 `v2SigningEnabled`，彻底解决国产定制系统安装器“未签名/无法安装”的拦截。
 - **输入框与子代理框解耦（彻底消除界面错位）**：

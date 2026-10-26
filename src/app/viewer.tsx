@@ -108,7 +108,15 @@ export default function DocumentViewerScreen() {
     try {
       if (Platform.OS === 'web') return toast(t('Downloading is available in the Android app.'), 'info')
 
-      // 1. 检查是否有已保存授权的目录
+      toast(t('Downloading {name}…', { name: fileName }), 'info')
+
+      // 1. 流式下载到应用内部专用缓存目录（File.downloadFileAsync 经底层 C++ OkHttp 直写，零 OOM 且原生兼容）
+      const tempDest = new File(Paths.cache, fileName)
+      if (tempDest.exists) tempDest.delete()
+      const url = hermes().rest.url('/api/files/download', { path: normalized })
+      const downloadedFile = await File.downloadFileAsync(url, tempDest, { headers: await hermes().authHeaders() })
+
+      // 2. 检查是否有已保存授权的目录
       let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
       let fileUri: string | null = null
 
@@ -118,16 +126,16 @@ export default function DocumentViewerScreen() {
         try {
           fileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
         } catch {
-          // 授权失效或目录不存在，清空重试
           targetDirUri = null
           await AsyncStorage.removeItem(SAVED_SAF_DIR_KEY)
         }
       }
 
-      // 2. 若无有效目录，唤起系统目录授权选择器（默认可选择 Downloads 目录）
+      // 3. 若无有效目录，唤起系统目录授权选择器（默认可选择 Downloads 目录）
       if (!fileUri) {
         const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync()
         if (!permissions.granted) {
+          if (tempDest.exists) tempDest.delete()
           return
         }
         targetDirUri = permissions.directoryUri
@@ -135,19 +143,16 @@ export default function DocumentViewerScreen() {
         fileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
       }
 
-      toast(t('Downloading {name}…', { name: fileName }), 'info')
-
-      // 3. 流式下载并直接落盘写入目标 URI（避免在 JS 内存中读取几十 MB 的 base64 导致 OOM）
-      const url = hermes().rest.url('/api/files/download', { path: normalized })
-      const downloaded = await FileSystem.downloadAsync(url, fileUri, {
-        headers: await hermes().authHeaders(),
+      // 4. 利用原生 copyAsync 将本地下载完成的真实文件流式复制到 SAF 目录，不经过 JS 内存
+      await FileSystem.copyAsync({
+        from: downloadedFile.uri,
+        to: fileUri,
       })
 
-      if (downloaded.status >= 200 && downloaded.status < 300) {
-        toast(t('Saved to device: {name}', { name: fileName }), 'success')
-      } else {
-        throw new Error(`Download failed with status ${downloaded.status}`)
-      }
+      // 5. 清理临时缓存
+      if (tempDest.exists) tempDest.delete()
+
+      toast(t('Saved to device: {name}', { name: fileName }), 'success')
     } catch (e) {
       toastError(e)
     }

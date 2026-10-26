@@ -43,7 +43,7 @@ import {
 import { useT } from '@/i18n'
 import { previewText } from '@/lib/chat/history'
 import { relativeTime, sourceLabel } from '@/lib/format'
-import { rest, rpc, useRuntime } from '@/lib/hermes'
+import { hermes, rest, rpc, useRuntime } from '@/lib/hermes'
 import { queryClient } from '@/lib/query'
 import { closeRuntime, useChat } from '@/store/chat'
 import { centered, space, useTheme } from '@/theme'
@@ -160,9 +160,10 @@ export default function SessionsScreen() {
         const rid = useChat.getState().storedToRuntime[row.id]
         if (rid) await closeRuntime(rid)
       }
-      // 2. 调用后端统一的 bulk-delete 事务删除接口，彻底免除单个 DELETE 的 not_found/栅栏冲突
+      // 2. 调用后端统一的 bulk-delete 事务删除接口，携带显式的 profile 参数
       const ids = targets.map((r) => r.id)
-      await rest().post('/api/sessions/bulk-delete', { ids })
+      const profile = hermes().profile ?? 'default'
+      await rest().post('/api/sessions/bulk-delete', { ids, profile })
       toast(targets.length === 1 ? t('Deleted') : t('{n} chats deleted', { n: targets.length }), 'success')
     } catch (e) {
       toastError(e)
