@@ -15,6 +15,15 @@ fi
 
 (
   cd android
+
+  # Foreground-service ordering is a runtime property, not a source shape: "promoted before
+  # stopping" and "stopped before promoting" contain the same calls in the same file. These
+  # Robolectric tests execute the real service, so a reordering fails the build instead of
+  # slipping past a grep.
+  ./gradlew :hermes-keepalive:testReleaseUnitTest \
+    -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
+    --no-daemon
+
   ./gradlew assembleRelease \
     -PreactNativeArchitectures="$ABIS" \
     -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" \
