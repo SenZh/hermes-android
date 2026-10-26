@@ -86,8 +86,10 @@ export default function DocumentViewerScreen() {
     !isLarge &&
     (/^text\/|json|yaml|xml|javascript|typescript|x-sh|toml/.test(mime) || isCodeOrTextExt)
 
-  let text = ''
-  if (isText && b64) {
+  const [downloadedText, setDownloadedText] = useState('')
+
+  let text = downloadedText
+  if (!text && isText && b64) {
     try {
       text = decodeBase64Utf8(b64)
     } catch {
@@ -95,23 +97,46 @@ export default function DocumentViewerScreen() {
     }
   }
 
-  // 本地持久化缓存单例文件对象：避免重复下载
-  async function getOrDownloadLocalFile(onProgressText?: string): Promise<File> {
+  // 强制拉取最新文件（若 forceRefresh=true，或者本地缓存不新鲜时覆写，避免串版本）
+  async function fetchFreshLocalFile(onProgressText?: string, forceRefresh = false): Promise<File> {
     const cached = new File(Paths.cache, fileName)
-    if (cached.exists && cached.size > 0) {
+    if (!forceRefresh && cached.exists && cached.size > 0) {
       return cached
     }
+    if (cached.exists) cached.delete()
     if (onProgressText) toast(onProgressText, 'info')
     const url = hermes().rest.url('/api/files/download', { path: normalized })
     return await File.downloadFileAsync(url, cached, { headers: await hermes().authHeaders() })
   }
 
-  // 快捷分享（优先复用已下载缓存）
+  // 下方大文件卡片专属处理：如果是文本/MD/HTML，下载并立即本地上屏预览；如果是二进制，直接落盘保存
+  async function loadLargeOrDownload() {
+    if (!normalized || isSystemRestricted) return
+    try {
+      if (Platform.OS === 'web') return toast(t('Downloading is available in the Android app.'), 'info')
+      const localFile = await fetchFreshLocalFile(t('Downloading {name}…', { name: fileName }), true)
+      
+      // 如果属于文本/源码/文档格式，直接读取前 100KB 流并在页面渲染预览
+      if (isCodeOrTextExt) {
+        const previewContent = await localFile.text()
+        setDownloadedText(previewContent)
+        setAllowLargeLoad(true)
+        toast(t('Preview loaded'), 'success')
+      } else {
+        // 如果是二进制文件（如 APK/ZIP），自动执行落盘保存到外部目录
+        await exportToDevice(localFile)
+      }
+    } catch (e: any) {
+      toastError(e)
+    }
+  }
+
+  // 快捷分享（复用本地新鲜缓存）
   async function share() {
     if (!normalized || isSystemRestricted) return
     try {
       if (Platform.OS === 'web') return toast(t('Sharing is available in the Android app.'), 'info')
-      const file = await getOrDownloadLocalFile(t('Preparing file…'))
+      const file = await fetchFreshLocalFile(t('Preparing file…'))
       await Sharing.shareAsync(file.uri, { mimeType: mime || undefined })
     } catch (e) {
       toastError(e)
@@ -121,44 +146,44 @@ export default function DocumentViewerScreen() {
   // 真正的文件落盘保存（保存到外部公共存储 Downloads 目录）
   const SAVED_SAF_DIR_KEY = 'hermes_download_saf_dir_uri'
 
+  async function exportToDevice(fileObj?: File) {
+    // 1. 获取最新本地文件
+    const localFile = fileObj ?? (await fetchFreshLocalFile(t('Downloading {name}…', { name: fileName }), true))
+
+    // 2. 选择或读取已授权的外部目录
+    let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
+    if (!targetDirUri) {
+      const picked = await Directory.pickDirectoryAsync()
+      if (!picked || !picked.uri) return
+      targetDirUri = picked.uri
+      await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
+    }
+
+    toast(t('Saving to disk…'), 'info')
+    const targetDir = new Directory(targetDirUri)
+    
+    // 3. 原生底核流式拷贝
+    await localFile.copy(targetDir)
+
+    // 解析用户可读的目录名称并友好展示
+    let displayFolder = 'Downloads'
+    try {
+      const decoded = decodeURIComponent(targetDirUri)
+      const parts = decoded.split(':')
+      if (parts.length > 1) {
+        displayFolder = parts[parts.length - 1]
+      }
+    } catch {}
+
+    toast(t('Saved to {folder}: {name}', { folder: displayFolder, name: fileName }), 'success')
+  }
+
   async function download() {
     if (!normalized || isSystemRestricted) return
     try {
       if (Platform.OS === 'web') return toast(t('Downloading is available in the Android app.'), 'info')
-
-      // 1. 获取或流式下载本地缓存（如果已经下载过，零网络请求秒级读取）
-      const localFile = await getOrDownloadLocalFile(t('Downloading {name}…', { name: fileName }))
-
-      // 2. 选择或读取已授权的外部目录
-      let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
-      if (!targetDirUri) {
-        const picked = await Directory.pickDirectoryAsync()
-        if (!picked || !picked.uri) return
-        targetDirUri = picked.uri
-        await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
-      }
-
-      toast(t('Saving to disk…'), 'info')
-      const targetDir = new Directory(targetDirUri)
-      
-      // 3. 利用 expo-file-system 官方新架构 File.copy() 原生底核流式拷贝
-      // 底层由 Java/Kotlin FileSystemModule.copy -> DestinationSink.SAF 直接通过 FileChannel 写入 SAF Content-URI
-      // 绝不经过 JS 内存，绝无 Base64，彻底根除 OOM！
-      await localFile.copy(targetDir)
-
-      // 解析用户可读的目录名称并友好展示
-      let displayFolder = 'Downloads'
-      try {
-        const decoded = decodeURIComponent(targetDirUri)
-        const parts = decoded.split(':')
-        if (parts.length > 1) {
-          displayFolder = parts[parts.length - 1]
-        }
-      } catch {}
-
-      toast(t('Saved to {folder}: {name}', { folder: displayFolder, name: fileName }), 'success')
+      await exportToDevice()
     } catch (e: any) {
-      // 若原授权目录失效，清除缓存让用户下次重新选择
       await AsyncStorage.removeItem(SAVED_SAF_DIR_KEY)
       toastError(e)
     }
@@ -208,8 +233,12 @@ export default function DocumentViewerScreen() {
             {t('This file is not a common text format. It may be large and consume data to preview.')}
           </Text>
           <View style={{ flexDirection: 'row', gap: space.md, marginTop: space.sm }}>
-            <Button label={t('Preview anyway')} variant="secondary" onPress={() => setAllowLargeLoad(true)} />
-            <Button label={t('Download')} variant="primary" icon={Download} onPress={download} />
+            <Button
+              label={isCodeOrTextExt ? t('Download & Preview') : t('Save to device')}
+              variant="primary"
+              icon={Download}
+              onPress={loadLargeOrDownload}
+            />
           </View>
         </View>
       ) : null}
