@@ -1,7 +1,8 @@
+import Constants from 'expo-constants'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { memo, useMemo, useState } from 'react'
-import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native'
+import { FlatList, Linking, Pressable, StyleSheet, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { SessionRow } from '@/app/(tabs)/sessions'
@@ -16,19 +17,22 @@ import {
   LayoutGrid,
   PenSquare,
   Pin,
+  RefreshCw,
   Search,
   Server,
   Settings2,
 } from '@/components/icons'
 import type { LucideIcon } from '@/components/icons'
 import { switchProfile, useProfiles } from '@/components/ProfileSwitcher'
-import { Chip, Text, toastError } from '@/components/ui'
+import { Chip, Text, toast, toastError } from '@/components/ui'
 import { useT } from '@/i18n'
 import { previewText } from '@/lib/chat/history'
 import { relativeTime, sourceLabel } from '@/lib/format'
 import { rest, useRuntime } from '@/lib/hermes'
+import { useRest } from '@/lib/hooks'
 import { openStored, setActive, useChat } from '@/store/chat'
 import { useConnections } from '@/store/connections'
+import { useUpdater } from '@/services/updater'
 import { font, radius, space, useTheme } from '@/theme'
 
 /**
@@ -42,6 +46,10 @@ export function ChatDrawer({ onClose }: { onClose: () => void }) {
   const connected = useRuntime((s) => s.state === 'open')
   const connections = useConnections((s) => s.connections)
   const activeConn = useConnections((s) => s.connections.find((x) => x.id === s.activeId))
+  const health = useRest<{ version?: string; displayVersion?: string }>(['health'], '/api/health')
+  const updateInfo = useUpdater((s) => s.info)
+  const checkingUpdate = useUpdater((s) => s.checking)
+  const checkUpdate = useUpdater((s) => s.check)
   const profiles = useProfiles()
   const currentProfile = activeConn?.profile ?? null
   const [backendsOpen, setBackendsOpen] = useState(false)
@@ -233,18 +241,75 @@ export function ChatDrawer({ onClose }: { onClose: () => void }) {
           <DrawerNavItem
             icon={Settings2}
             label={t('Settings')}
+            hasBadge={updateInfo?.hasUpdate}
             onPress={() => {
               onClose()
               router.navigate('/more')
             }}
           />
         </View>
+
+        {/* 版本信息与检查更新栏 */}
+        <Pressable
+          accessibilityRole="button"
+          onPress={async () => {
+            if (updateInfo?.hasUpdate && updateInfo.downloadUrl) {
+              void Linking.openURL(updateInfo.downloadUrl)
+            } else {
+              try {
+                toast(t('Checking for updates…'), 'info')
+                const res = await checkUpdate(false)
+                if (res?.hasUpdate && res.downloadUrl) {
+                  toast(t('New version available: {ver}', { ver: res.latestVersion }), 'success')
+                  void Linking.openURL(res.downloadUrl)
+                } else {
+                  toast(t('Already up to date'), 'success')
+                }
+              } catch (e) {
+                toastError(e)
+              }
+            }
+          }}
+          style={({ pressed }) => [
+            styles.versionBar,
+            { backgroundColor: pressed ? c.surfaceAlt : 'transparent' },
+          ]}
+        >
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+              <Text variant="caption" tone="muted">
+                {t('App')}: v{Constants.expoConfig?.version ?? '1.8.3'}
+              </Text>
+              {updateInfo?.hasUpdate ? (
+                <View style={[styles.updateBadge, { backgroundColor: c.accent }]}>
+                  <Text variant="caption" style={{ color: '#fff', fontSize: 10, lineHeight: 12 }}>
+                    NEW
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text variant="caption" tone="faint" numberOfLines={1}>
+              {t('Gateway')}: {health.data?.displayVersion ?? health.data?.version ?? '—'}
+            </Text>
+          </View>
+          <RefreshCw size={14} color={checkingUpdate ? c.accent : c.textFaint} />
+        </Pressable>
       </View>
     </View>
   )
 }
 
-function DrawerNavItem({ icon: Icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+function DrawerNavItem({
+  icon: Icon,
+  label,
+  hasBadge,
+  onPress,
+}: {
+  icon: LucideIcon
+  label: string
+  hasBadge?: boolean
+  onPress: () => void
+}) {
   const { c } = useTheme()
   return (
     <Pressable
@@ -253,7 +318,10 @@ function DrawerNavItem({ icon: Icon, label, onPress }: { icon: LucideIcon; label
       onPress={onPress}
       style={({ pressed }) => [styles.navItem, { backgroundColor: pressed ? c.surfaceAlt : 'transparent' }]}
     >
-      <Icon size={18} color={c.textMuted} strokeWidth={1.75} />
+      <View style={{ position: 'relative' }}>
+        <Icon size={18} color={c.textMuted} strokeWidth={1.75} />
+        {hasBadge ? <View style={[styles.badgeDot, { backgroundColor: c.accent }]} /> : null}
+      </View>
       <Text variant="caption" tone="muted">
         {label}
       </Text>
@@ -342,4 +410,26 @@ const styles = StyleSheet.create({
   },
   navRow: { flexDirection: 'row', gap: 2 },
   navItem: { flex: 1, minWidth: 0, minHeight: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  badgeDot: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  versionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs + 2,
+    marginTop: space.xs,
+    borderRadius: radius.sm,
+  },
+  updateBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
 })

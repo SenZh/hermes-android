@@ -11,6 +11,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 import { AppLock } from '@/components/AppLock'
+import { initAutoUpdater } from '@/services/updater'
 import { GatewayBridge } from '@/components/GatewayBridge'
 import { DialogHost, ToastHost } from '@/components/ui/Dialogs'
 import { TurnEffects } from '@/components/chat/TurnEffects'
@@ -81,6 +82,7 @@ function AppShell() {
   // Once per launch, after hydration: offer the previous run's crash/ANR report.
   useEffect(() => {
     void promptLastExit()
+    initAutoUpdater()
   }, [])
 
   const navTheme = {

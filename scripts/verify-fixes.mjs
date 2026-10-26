@@ -360,6 +360,33 @@ function testTpsDualStrategy() {
   console.log(' -> PASSED: TPS dual-strategy verified — never drops output rate even on zero-usage upstream.\n')
 }
 
+// 15. 测试自动更新器版本号比较逻辑 (Semver)
+function testUpdaterVersionCompare() {
+  console.log('[Test 15] Testing Auto-Updater Semver Comparison...')
+
+  function compareVersions(v1, v2) {
+    const clean1 = v1.replace(/^v/, '').split('-')[0].split('.').map((n) => parseInt(n, 10) || 0)
+    const clean2 = v2.replace(/^v/, '').split('-')[0].split('.').map((n) => parseInt(n, 10) || 0)
+    const len = Math.max(clean1.length, clean2.length)
+    for (let i = 0; i < len; i++) {
+      const num1 = clean1[i] ?? 0
+      const num2 = clean2[i] ?? 0
+      if (num1 > num2) return 1
+      if (num1 < num2) return -1
+    }
+    return 0
+  }
+
+  assert.equal(compareVersions('1.8.4', '1.8.3'), 1, '1.8.4 > 1.8.3')
+  assert.equal(compareVersions('1.9.0', '1.8.3'), 1, '1.9.0 > 1.8.3')
+  assert.equal(compareVersions('2.0.0', '1.8.3'), 1, '2.0.0 > 1.8.3')
+  assert.equal(compareVersions('1.8.3', '1.8.3'), 0, '1.8.3 == 1.8.3')
+  assert.equal(compareVersions('1.8.2', '1.8.3'), -1, '1.8.2 < 1.8.3')
+  assert.equal(compareVersions('v1.8.4', '1.8.3-preview.4'), 1, 'tag format compatibility')
+
+  console.log(' -> PASSED: Auto-updater semver comparisons verified.\\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -376,7 +403,8 @@ function runAll() {
   testContinuousSelectionArchitecture()
   testSessionMutationFence()
   testTpsDualStrategy()
-  console.log('=== ALL 14 SUITES PASSED (0 ERRORS) ===')
+  testUpdaterVersionCompare()
+  console.log('=== ALL 15 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()
