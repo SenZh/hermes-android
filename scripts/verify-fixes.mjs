@@ -734,6 +734,70 @@ function testKeepAliveForegroundOrdering() {
   console.log(' -> PASSED: Foreground promotion ordering and preflight wiring verified.\n')
 }
 
+function testVendorRomAdaptation() {
+  console.log('[Test 24] Testing Vendor ROM Adaptation (Auto-start / Files / Battery)...')
+  const moduleSrc = fs.readFileSync(
+    path.resolve('modules/hermes-keepalive/android/src/main/java/expo/modules/hermeskeepalive/HermesKeepAliveModule.kt'),
+    'utf-8',
+  )
+  const manifest = fs.readFileSync(
+    path.resolve('modules/hermes-keepalive/android/src/main/AndroidManifest.xml'),
+    'utf-8',
+  )
+
+  // openFolder 必须有四层降级：隐式 MIME_TYPE_DIR → 显式 DocumentsUI → 厂商文件管理 → OPEN_DOCUMENT_TREE
+  const folderFn = moduleSrc.slice(moduleSrc.indexOf('Function("openFolder")'))
+  const folderBody = folderFn.slice(0, folderFn.indexOf('Function("batteryOptimizationIgnored")'))
+  assert.ok(
+    folderBody.includes('DocumentsContract.Document.MIME_TYPE_DIR'),
+    'openFolder L1 must use MIME_TYPE_DIR so browsers/Google cannot claim the intent',
+  )
+  assert.ok(
+    folderBody.includes('com.android.documentsui'),
+    'openFolder L2 must fall back to explicit DocumentsUI',
+  )
+  assert.ok(
+    folderBody.includes('com.miui.fileexplorer') && folderBody.includes('com.huawei.hidisk'),
+    'openFolder L3 must probe vendor file managers',
+  )
+  assert.ok(
+    folderBody.includes('Intent.ACTION_OPEN_DOCUMENT_TREE'),
+    'openFolder L4 must end at OPEN_DOCUMENT_TREE so the user always reaches the folder',
+  )
+  assert.ok(
+    folderBody.includes('resolveActivity'),
+    'vendor components must be probed before being launched',
+  )
+
+  // 自启动：五家厂商 + 兜底应用详情页
+  const autoFn = moduleSrc.slice(moduleSrc.indexOf('Function("openAutoStartSettings")'))
+  for (const pkg of ['com.miui.securitycenter', 'com.huawei.systemmanager', 'com.coloros.safecenter', 'com.vivo.permissionmanager', 'com.samsung.android.sm']) {
+    assert.ok(autoFn.includes(pkg), `auto-start must map ${pkg}`)
+  }
+  assert.ok(
+    autoFn.includes('Settings.ACTION_APPLICATION_DETAILS_SETTINGS'),
+    'auto-start must fall back to the app details screen when the vendor page is absent',
+  )
+
+  // 电池优化豁免是唯一有真实查询 API 的项，权限必须声明
+  assert.ok(manifest.includes('REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'), 'battery exemption intent needs its permission')
+  assert.ok(
+    moduleSrc.includes('Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'),
+    'battery exemption must use the standard intent',
+  )
+  assert.ok(
+    moduleSrc.includes('isIgnoringBatteryOptimizations'),
+    'battery state must be queried, not assumed',
+  )
+
+  // UI 必须给出入口，否则用户永远不知道要去开
+  const about = fs.readFileSync(path.resolve('src/app/about.tsx'), 'utf-8')
+  assert.ok(about.includes('KeepAlive.openAutoStartSettings'), 'the auto-start entry must be reachable from the UI')
+  assert.ok(about.includes('KeepAlive.requestBatteryExemption'), 'the battery exemption entry must be reachable')
+
+  console.log(' -> PASSED: Vendor ROM adaptation verified across four folder fallbacks and five vendors.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -758,7 +822,8 @@ function runAll() {
   testNativeDiskDownloadArchitecture()
   testSavedStateReplacesDownloadEntry()
   testKeepAliveForegroundOrdering()
-  console.log('=== ALL 22 SUITES PASSED (0 ERRORS) ===')
+  testVendorRomAdaptation()
+  console.log('=== ALL 23 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

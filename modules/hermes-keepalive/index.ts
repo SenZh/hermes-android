@@ -16,6 +16,9 @@ interface HermesKeepAliveModule {
   lastStartError(): string | null
   openFile(uri: string, mimeType?: string): boolean
   openFolder(dirUri: string): boolean
+  batteryOptimizationIgnored(): boolean
+  requestBatteryExemption(): boolean
+  openAutoStartSettings(): boolean
 }
 
 // Android only; elsewhere (web, Expo Go) every call is a no-op.
@@ -33,6 +36,12 @@ export const KeepAlive = {
   openFile: (uri: string, mimeType?: string) => native?.openFile(uri, mimeType) ?? false,
   /** Open a SAF tree URI folder directly in DocumentsUI / File Manager. */
   openFolder: (dirUri: string) => native?.openFolder(dirUri) ?? false,
+  /** Whether the app is already exempt from Doze / battery optimisation. */
+  batteryOptimizationIgnored: () => native?.batteryOptimizationIgnored() ?? true,
+  /** Ask the system for the Doze whitelist. */
+  requestBatteryExemption: () => native?.requestBatteryExemption() ?? false,
+  /** Jump to the vendor's auto-start screen (Xiaomi/Huawei/OPPO/vivo/…); no read API exists. */
+  openAutoStartSettings: () => native?.openAutoStartSettings() ?? false,
 }
 
 /** Report of the last unexpected exit; null when absent, already seen, or unsupported. */

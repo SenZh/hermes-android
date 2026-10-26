@@ -1,5 +1,22 @@
 # 更新日志 (Changelog)
 
+## [v1.8.3-preview.22] - 2026-10-26
+
+### ✨ 新增 (Features)
+
+- **国产 ROM 后台保活引导**：「关于」页新增「后台保活」分组：
+  - **电池优化**：可读取真实豁免状态（`isIgnoringBatteryOptimizations`），未豁免时一键发起系统豁免请求；
+  - **自启动**：按厂商精确跳转自启动管理页（小米/Redmi/POCO `com.miui.securitycenter`、华为/荣耀 `com.huawei.systemmanager`、OPPO/realme/一加 `com.coloros.safecenter`、vivo/iQOO `com.vivo.permissionmanager`、三星 `com.samsung.android.sm`），组件不可用时自动降级到应用详情页。
+  - 说明：Android 至今**没有公开 API 可读取或写入自启动开关**，因此只能跳转引导，无法代用户开启。
+
+### 🛠 缺陷修复 (Fixes)
+
+- **「打开所在目录」补齐四层降级**：国产 ROM 普遍用自家文件管理器替换系统 DocumentsUI，仅发 `ACTION_VIEW + MIME_TYPE_DIR` 会静默无响应（点击没反应）。现按序降级：
+  1. 隐式 `ACTION_VIEW` + `MIME_TYPE_DIR`（排除浏览器/Google 抢注）；
+  2. 显式 `com.android.documentsui.files.FilesActivity` + `EXTRA_INITIAL_URI`；
+  3. 厂商文件管理器（小米/华为/ColorOS/vivo 组件，先 `resolveActivity` 探测再启动）；
+  4. `ACTION_OPEN_DOCUMENT_TREE` + `EXTRA_INITIAL_URI` 兜底，保证一定能到达目录。
+
 ## [v1.8.3-preview.21] - 2026-10-26
 
 ### 🛠 缺陷修复 (Fixes)

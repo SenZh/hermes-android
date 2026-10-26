@@ -2,9 +2,9 @@ import Constants from 'expo-constants'
 import * as Clipboard from 'expo-clipboard'
 import { Stack } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
-import { BookOpen, Bug, Code2, MessageCircle } from '@/components/icons'
+import { BookOpen, Bug, BatteryCharging, Code2, MessageCircle, Rocket } from '@/components/icons'
 import { useState } from 'react'
-import { View } from 'react-native'
+import { Platform, View } from 'react-native'
 
 import { HermesMark } from '@/components/HermesMark'
 import { KeyValue, Row, Screen, Section, Text, toast } from '@/components/ui'
@@ -66,6 +66,35 @@ export default function AboutScreen() {
             onPress={() => {
               void Clipboard.setStringAsync(KeepAlive.lastStartError() ?? '')
               toast(t('Copied'), 'success')
+            }}
+            last
+          />
+        </Section>
+      ) : null}
+      {Platform.OS === 'android' && KeepAlive.available ? (
+        <Section title={t('Background keep-alive')}>
+          <Row
+            icon={BatteryCharging}
+            title={t('Battery optimization')}
+            subtitle={
+              KeepAlive.batteryOptimizationIgnored()
+                ? t('Exempt')
+                : t('Restricted — tap to allow background work')
+            }
+            onPress={() => {
+              if (!KeepAlive.requestBatteryExemption()) {
+                toast(t('Could not open battery settings'), 'info')
+              }
+            }}
+          />
+          <Row
+            icon={Rocket}
+            title={t('Auto-start')}
+            subtitle={t('Open the system screen and allow Hermes')}
+            onPress={() => {
+              if (!KeepAlive.openAutoStartSettings()) {
+                toast(t('Could not open auto-start settings'), 'info')
+              }
             }}
             last
           />

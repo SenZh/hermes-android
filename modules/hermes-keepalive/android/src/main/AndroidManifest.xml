@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <!-- Needed to ask for the Doze whitelist; without it the REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+       intent is refused and the app can only send the user to the settings list. -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
   <application>
     <!-- Keeps the gateway socket alive while the agent works with the app in the background. -->

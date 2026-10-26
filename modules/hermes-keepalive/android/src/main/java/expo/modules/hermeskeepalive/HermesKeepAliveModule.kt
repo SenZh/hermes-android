@@ -1,15 +1,20 @@
 package expo.modules.hermeskeepalive
 
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.DocumentsContract
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.util.Locale
 
 class HermesKeepAliveModule : Module() {
   private val context: Context
@@ -138,9 +143,11 @@ class HermesKeepAliveModule : Module() {
     }
 
     /**
-     * Open a folder (SAF tree URI) directly in the system's file manager / DocumentsUI.
-     * Specifying DocumentsContract.Document.MIME_TYPE_DIR ensures only real file managers respond,
-     * preventing apps like Google from claiming the content intent.
+     * Open a folder (SAF tree URI) in the system file manager.
+     *
+     * Vendors replace DocumentsUI with their own file manager, and a plain ACTION_VIEW with
+     * MIME_TYPE_DIR is simply not answered on some of them — the click would silently do nothing.
+     * So walk a four-step ladder and stop at the first one that actually resolves.
      */
     Function("openFolder") { dirUriString: String ->
       val uri = Uri.parse(dirUriString)
@@ -153,25 +160,138 @@ class HermesKeepAliveModule : Module() {
       } catch (_: Exception) {
         uri
       }
-      val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(docUri, DocumentsContract.Document.MIME_TYPE_DIR)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+      fun attempt(intent: Intent): Boolean = try {
+        context.startActivity(intent)
+        true
+      } catch (_: Exception) {
+        false
       }
+
+      val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+
+      // L1: implicit. MIME_TYPE_DIR keeps unrelated apps (browsers, Google) out of the chooser.
+      if (attempt(Intent(Intent.ACTION_VIEW).apply {
+          setDataAndType(docUri, DocumentsContract.Document.MIME_TYPE_DIR)
+          addFlags(flags)
+        })
+      ) return@Function true
+
+      // L2: explicit DocumentsUI, still present on most AOSP-derived ROMs.
+      if (attempt(Intent(Intent.ACTION_VIEW).apply {
+          component = ComponentName("com.android.documentsui", "com.android.documentsui.files.FilesActivity")
+          putExtra(DocumentsContract.EXTRA_INITIAL_URI, docUri)
+          addFlags(flags)
+        })
+      ) return@Function true
+
+      // L3: vendor file managers. Names change between ROM versions, so probe before trusting.
+      val vendorBrowsers = listOf(
+        ComponentName("com.android.fileexplorer", "com.android.fileexplorer.FileExplorerTabActivity"),
+        ComponentName("com.miui.fileexplorer", "com.miui.fileexplorer.FileExplorerTabActivity"),
+        ComponentName("com.huawei.hidisk", "com.huawei.hidisk.filemanager.FileManager"),
+        ComponentName("com.coloros.filemanager", "com.coloros.filemanager.filerecycler.FileManagerActivity"),
+        ComponentName("com.vivo.filemanager", "com.vivo.filemanager.FileManagerActivity"),
+      )
+      for (target in vendorBrowsers) {
+        if (context.packageManager.resolveActivity(Intent(Intent.ACTION_VIEW).setComponent(target), 0) == null) {
+          continue
+        }
+        if (attempt(Intent(Intent.ACTION_VIEW).apply {
+            component = target
+            putExtra(DocumentsContract.EXTRA_INITIAL_URI, docUri)
+            addFlags(flags)
+          })
+        ) return@Function true
+      }
+
+      // L4: last resort. Costs the user one extra tap but always reaches the folder.
+      attempt(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+        putExtra(DocumentsContract.EXTRA_INITIAL_URI, docUri)
+        addFlags(flags)
+      })
+    }
+
+    /**
+     * Whether this app is exempt from Doze/battery optimisation.
+     *
+     * This is the only vendor-related switch with a real query API. Auto-start cannot be read or
+     * written at all — for that the UI can only guide the user to the right settings screen.
+     */
+    Function("batteryOptimizationIgnored") {
+      val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+      power.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    /** Ask for the Doze whitelist; the system shows its own confirmation dialog. */
+    Function("requestBatteryExemption") {
+      try {
+        context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+          data = Uri.parse("package:${context.packageName}")
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+        true
+      } catch (_: Exception) {
+        false
+      }
+    }
+
+    /**
+     * Jump to the vendor's auto-start management screen.
+     *
+     * There is no public API to read or change this switch, so all we can do is land the user on
+     * the right page. Component names differ per ROM and change between versions, hence the
+     * resolve probe plus a fallback to the app details screen.
+     */
+    Function("openAutoStartSettings") {
+      val manufacturer = Build.MANUFACTURER.lowercase(Locale.ROOT)
+      val intent = Intent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+      when {
+        manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco") ->
+          intent.component = ComponentName(
+            "com.miui.securitycenter",
+            "com.miui.permcenter.autostart.AutoStartManagementActivity",
+          )
+        manufacturer.contains("huawei") || manufacturer.contains("honor") ->
+          intent.component = ComponentName(
+            "com.huawei.systemmanager",
+            "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+          )
+        manufacturer.contains("oppo") || manufacturer.contains("realme") || manufacturer.contains("oneplus") ->
+          intent.component = ComponentName(
+            "com.coloros.safecenter",
+            "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+          )
+        manufacturer.contains("vivo") || manufacturer.contains("iqoo") ->
+          intent.component = ComponentName(
+            "com.vivo.permissionmanager",
+            "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+          )
+        manufacturer.contains("samsung") ->
+          intent.component = ComponentName(
+            "com.samsung.android.sm",
+            "com.samsung.android.sm.app.dashboard.SmartManagerDashBoardActivity",
+          )
+        else -> {
+          intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+          intent.data = Uri.fromParts("package", context.packageName, null)
+        }
+      }
+
+      val resolvable = context.packageManager.resolveActivity(intent, 0) != null
+      if (!resolvable) {
+        intent.action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+        intent.component = null
+        intent.data = Uri.fromParts("package", context.packageName, null)
+      }
+
       try {
         context.startActivity(intent)
+        true
       } catch (_: Exception) {
-        val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
-          data = uri
-          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val chooser = Intent.createChooser(fallbackIntent, "Open folder").apply {
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(chooser)
+        false
       }
-      true
     }
   }
 
