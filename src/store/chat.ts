@@ -270,7 +270,7 @@ export function handleEvent(event: AnyGatewayEvent) {
         // A server-queued prompt starts now: its bubble is no longer pending.
         const firstQueued = s0.messages.findIndex((m) => m.role === 'user' && m.pending === 'queued')
         const messages = firstQueued >= 0 ? s0.messages.map((m, i) => (i === firstQueued ? { ...m, pending: null } : m)) : s0.messages
-        return { messages, busy: true, turnStartedAt: Date.now(), streamingId: null, status: null, error: null }
+        return { messages, busy: true, turnStartedAt: s0.turnStartedAt ?? Date.now(), streamingId: null, status: null, error: null }
       })
       return
     case 'message.delta':
@@ -1010,6 +1010,7 @@ async function sendTo(rid: string, text: string, mode: SendMode, opts: { display
     const status = res.status ?? 'streaming'
     update(rid, (cur) => ({
       busy: true,
+      turnStartedAt: cur.turnStartedAt ?? Date.now(),
       messages: patchMessage(cur, user.id, (m) => ({
         ...m,
         rowId: res.user_row_id ?? m.rowId,

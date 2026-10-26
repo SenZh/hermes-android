@@ -1,6 +1,6 @@
 # 更新日志 (Changelog)
 
-## [v1.8.3-preview.8] - 2026-10-26
+## [v1.8.3-preview.9] - 2026-10-26
 
 ### 🚀 新增功能 (Features)
 - **版本号信息与自动检查更新**：
@@ -23,11 +23,15 @@
     - 平均 TPS：优先读取后端结算的 Token 吞吐率，缺失时基于输出文本长度与耗时做智能估算保底（如 `42.5 tok/s`），确保每一轮新回答稳定展示。
 
 ### 🛠 体验优化与缺陷修复 (Fixes & Improvements)
+- **工具栏与操作按键视觉紧凑化**：
+  - 优化助手输出底部 6 键操作栏间距由 `8px` 紧凑收敛至 `2px`，按键容器收窄至 `30x28`，消除松散留白；
+  - 优化用户气泡底部三键操作栏间距由 `8px` 收缩至 `2px`，按钮紧凑贴合气泡边缘。
+- **修复在线推理耗时与 TPS 未记录问题**：
+  - 根因：在用户提交 prompt 发送时，`cur.turnStartedAt` 未在本地乐观初始化，若网关 `message.start` 事件延迟抵达，会导致耗时被置为空。现已在前台发送与网关响应双重阶段锁定 `turnStartedAt`，回答完成秒级计算耗时与 TPS。
 - **修复会话删除 `requires an explicit profile` 报错**：
   - 在会话删除请求（`POST /api/sessions/bulk-delete`）中显式挂载当前所处 `profile`（未指定默认使用 `default`），解决多配置档网关的排他性校验拦截，彻底消除删除报错。
 - **重构 SAF 下载通道（解决 `Directory doesn't exist` 报错）**：
-  - 根因：Expo 的 `downloadAsync` 只接受 `file://` 真实路径，传 `content://`（SAF 目录）会触发 Android 内部目录检测抛出 `IOException: Directory doesn't exist`。
-  - 修复：采用两阶段架构：先由 C++ 底层将网络文件安全流式直写到私有缓存 `file://`（零 OOM），再通过原生 `copyAsync` 直接流式复制到用户授权的 SAF `content://` 目标文件，既防 OOM 又彻底消除路径异常。
+  - 采用两阶段架构：先由 C++ 底层将网络文件安全流式直写到私有缓存 `file://`（零 OOM），再通过原生 `copyAsync` 直接流式复制到用户授权的 SAF `content://` 目标文件，既防 OOM 又彻底消除路径异常。
 - **相册/照片库权限拦截与调用修复**：
   - 补齐 Android 原生动态相册授权检查 `requestMediaLibraryPermissionsAsync()`，彻底修复相册唤起崩溃问题。
 - **分享交互响应速度优化**：
