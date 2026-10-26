@@ -525,9 +525,14 @@ function testNativeDiskDownloadArchitecture() {
   // 2. 真实静态源码断言：落盘链路必须走 overwrite 选项，且必须回到目录认领真实 URI
   const viewer = fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8')
   assert.equal(
-    viewer.includes('copy(finalDestFile, { overwrite: shouldOverwrite })'),
+    viewer.includes('copy(targetDir, { overwrite: shouldOverwrite })'),
     true,
-    'copy() must pass overwrite so SAF deletes the old document instead of throwing DestinationAlreadyExists',
+    'copy() must target the SAF Directory (container branch) and pass overwrite, never a synthesized child File',
+  )
+  assert.equal(
+    /new File\(\s*targetDir\s*,/.test(viewer),
+    false,
+    'new File(dir, name) under SAF resolves to the tree root, not the file: it must never be a copy destination',
   )
   assert.equal(
     viewer.includes('conflictFile'),
@@ -574,6 +579,112 @@ function testSavedStateReplacesDownloadEntry() {
   console.log(' -> PASSED: Saved state replaces the download entry across every file type.\n')
 }
 
+function testKeepAliveForegroundOrdering() {
+  console.log('[Test 23] Testing KeepAlive Foreground Promotion Ordering...')
+
+  // 去掉注释后再比下标：一行注释就能骗过纯 includes 断言，那不是门禁。
+  const stripComments = (src) =>
+    src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/^\s*\*[^\n]*/gm, '')
+
+  const service = stripComments(
+    fs.readFileSync(
+      path.resolve('modules/hermes-keepalive/android/src/main/java/expo/modules/hermeskeepalive/KeepAliveService.kt'),
+      'utf-8',
+    ),
+  )
+  const module = stripComments(
+    fs.readFileSync(
+      path.resolve('modules/hermes-keepalive/android/src/main/java/expo/modules/hermeskeepalive/HermesKeepAliveModule.kt'),
+      'utf-8',
+    ),
+  )
+  const turns = stripComments(fs.readFileSync(path.resolve('src/components/chat/TurnEffects.tsx'), 'utf-8'))
+
+  // 1. onStartCommand 方法体：startForeground 必须最先出现
+  const onStart = service.slice(service.indexOf('override fun onStartCommand'))
+  const body = onStart.slice(0, onStart.indexOf('override fun onDestroy'))
+  const atForeground = body.indexOf('ServiceCompat.startForeground')
+  assert.notEqual(atForeground, -1, 'onStartCommand must call startForeground via ServiceCompat')
+  const atStopSelf = body.indexOf('stopSelf()')
+  assert.notEqual(atStopSelf, -1, 'onStartCommand must still be able to stop after a failed promotion')
+  assert.ok(atForeground < atStopSelf, 'startForeground must precede any stopSelf() in onStartCommand')
+  assert.equal(body.indexOf('ensureChannelReady'), -1, 'onStartCommand must not call ensureChannelReady (preflight belongs in start())')
+
+  // 2. 首个 catch 块内不得 stopSelf，必须用兜底通知再试一次
+  const firstCatch = body.slice(body.indexOf('catch (first'))
+  const firstCatchBlock = firstCatch.slice(0, firstCatch.indexOf('catch (second'))
+  assert.equal(firstCatchBlock.includes('stopSelf'), false, 'first catch must not stopSelf before a foreground promotion')
+  assert.ok(
+    (firstCatchBlock.match(/startForeground/g) || []).length >= 1,
+    'first catch must retry startForeground with the fallback notification',
+  )
+
+  // 3. 看门狗只上报，不碰生命周期
+  const watchdog = module.slice(module.indexOf('private val watchdog'))
+  const watchdogBody = watchdog.slice(0, watchdog.indexOf('override fun definition'))
+  assert.equal(watchdogBody.includes('stopService'), false, 'watchdog must not stopService')
+  assert.equal(watchdogBody.includes('stopSelf'), false, 'watchdog must not stopSelf')
+  assert.ok(watchdogBody.includes('UNCONFIRMED'), 'watchdog must record the miss as UNCONFIRMED')
+
+  // 4. start() 的 preflight 必须先于投递
+  const startFn = module.slice(module.indexOf('Function("start")'))
+  const startBody = startFn.slice(0, startFn.indexOf('Function("update")'))
+  const atPreflight = startBody.indexOf('ensureChannelReady')
+  const atPost = startBody.indexOf('startForegroundService')
+  assert.ok(atPreflight !== -1 && atPost !== -1, 'start() must run preflight and then post')
+  assert.ok(atPreflight < atPost, 'preflight must run before startForegroundService is posted')
+  // 契约 C3 原文：preflight 不通过必须直接返回 false，不能"照投不误"
+  assert.ok(
+    /if\s*\(\s*!\s*KeepAliveService\.ensureChannelReady\([^)]*\)\s*\)\s*return@Function\s+false/.test(startBody),
+    'start() must bail out with false when the preflight fails',
+  )
+
+  // 5. OnDestroy 不得再 stopService（该通道会与待决的 startForeground 相撞）
+  const onDestroy = module.slice(module.indexOf('OnDestroy {'))
+  const onDestroyBody = onDestroy.slice(0, onDestroy.indexOf('private companion object'))
+  assert.equal(onDestroyBody.includes('stopService'), false, 'OnDestroy must not stopService')
+
+  // 6. JS：冷却与退避必须真实接在 start 之前
+  const atStart = turns.indexOf('KeepAlive.start(')
+  assert.ok(atStart !== -1, 'TurnEffects must call KeepAlive.start')
+  const atCooldown = turns.indexOf('canStartNow(now')
+  const atRetryGate = turns.indexOf('now < retryAfter')
+  assert.ok(atCooldown !== -1 && atCooldown < atStart, 'cooldown gate must be wired before KeepAlive.start')
+  assert.ok(atRetryGate !== -1 && atRetryGate < atStart, 'backoff gate must be wired before KeepAlive.start')
+  assert.ok(turns.includes('nextBackoffMs(failStreak)'), 'backoff must be computed with the shared policy')
+
+  // 7. JS：服务已死的分支必须先 stop 再复位，避免裂脑重复投递
+  const deadBranch = turns.slice(turns.indexOf('if (running && !KeepAlive.update'))
+  const deadBody = deadBranch.slice(0, deadBranch.indexOf('if (!running) {'))
+  assert.ok(deadBody.includes('KeepAlive.stop()'), 'dead-service branch must stop before resetting running')
+  assert.ok(
+    deadBody.indexOf('KeepAlive.stop()') < deadBody.indexOf('running = false'),
+    'stop must precede running = false in the dead-service branch',
+  )
+
+  // 8. stop() 必须避开 STARTING 窗口（该窗口内停服就是崩溃路径）
+  const stopFn = module.slice(module.indexOf('Function("stop")'))
+  const stopBody = stopFn.slice(0, stopFn.indexOf('OnDestroy {'))
+  assert.ok(
+    stopBody.includes('ServiceState.STARTING') && stopBody.includes('requestStop()'),
+    'stop() must defer while a start is still in flight',
+  )
+  assert.ok(
+    service.includes('if (stopRequested)') && service.includes('clearStopRequest()'),
+    'the service must honour a deferred stop after promotion',
+  )
+
+  // 9. 通知常量不得漂移
+  assert.ok(service.includes('NOTIFICATION_ID = 9119'), 'notification id must stay 9119')
+  assert.ok(service.includes('CHANNEL_ID = "hermes-working"'), 'channel id must stay hermes-working')
+  assert.ok(service.includes('IMPORTANCE_LOW'), 'channel importance must stay LOW')
+
+  console.log(' -> PASSED: Foreground promotion ordering and preflight wiring verified.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -598,7 +709,8 @@ function runAll() {
   testSessionDeleteRpcContract()
   testNativeDiskDownloadArchitecture()
   testSavedStateReplacesDownloadEntry()
-  console.log('=== ALL 22 SUITES PASSED (0 ERRORS) ===')
+  testKeepAliveForegroundOrdering()
+  console.log('=== ALL 23 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

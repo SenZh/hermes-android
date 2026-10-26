@@ -9,6 +9,7 @@ import { syncCronBackgroundCheck } from '@/lib/backgroundTasks'
 import { textOf } from '@/lib/chat/types'
 import { useCronWatch } from '@/lib/cronWatch'
 import { useRuntime } from '@/lib/hermes'
+import { canStartNow, nextBackoffMs, STOP_COOLDOWN_MS } from '@/lib/keepAlivePolicy'
 import { CHANNELS, notificationPermission, notify } from '@/lib/notify'
 import { speak } from '@/lib/voice'
 import { answerRequest, onTurnComplete, setActive, useChat } from '@/store/chat'
@@ -73,18 +74,33 @@ function handleResponse(response: Notifications.NotificationResponse) {
 /**
  * While any chat is working or waiting on the user, hold a foreground service so Android does not
  * freeze the app (and drop the gateway socket) once it is in the background.
+ *
+ * The bookkeeping below lives at module scope on purpose: this effect remounts on navigation, and a
+ * stop from one instance followed by a start from the next is what leaves Android waiting for a
+ * startForeground() that never comes. Sharing the timestamps keeps the cooldown effective across
+ * mounts.
  */
+let lastStopAt = 0
+let failStreak = 0
+let retryAfter = 0
+
 function useKeepAlive() {
   useEffect(() => {
     if (Platform.OS !== 'android' || !KeepAlive.available) return
     let running = false
     let shown = ''
+    let timer: ReturnType<typeof setTimeout> | undefined
     const sync = () => {
       const { sessions, requests } = useChat.getState()
       const busy = Object.values(sessions).filter((s) => s.busy)
       const want = useSettings.getState().keepAlive && (busy.length > 0 || requests.length > 0)
       if (!want) {
-        if (running) KeepAlive.stop()
+        if (running) {
+          KeepAlive.stop()
+          lastStopAt = Date.now()
+          failStreak = 0
+          retryAfter = 0
+        }
         running = false
         shown = ''
         return
@@ -96,14 +112,44 @@ function useKeepAlive() {
         : [lead?.title, lead?.status].filter(Boolean).join(' · ') || t('Working on your request')
       const label = `${title}|${text}`
       if (label === shown) return
-      // Starting is only allowed from the foreground; a refused start is retried when the app returns.
       if (running && !KeepAlive.update(title, text)) {
-        // The service died underneath us (timeout cap, task swipe): retry from scratch next pass.
+        // The service died underneath us (timeout cap, task swipe). Stop it explicitly so the
+        // next start is not posted on top of a half-dead instance, then re-arm from scratch.
+        KeepAlive.stop()
         running = false
         shown = ''
+        lastStopAt = Date.now()
       }
-      if (!running) running = AppState.currentState === 'active' && KeepAlive.start(title, text)
-      if (running) shown = label
+      if (!running) {
+        const now = Date.now()
+        // Starting only from the foreground. A start posted right after a stop can interleave
+        // with the pending teardown and leave Android waiting forever for startForeground().
+        if (AppState.currentState !== 'active') return
+        if (!canStartNow(now, lastStopAt)) {
+          // Cooldown must delay, not drop: wake up when it expires instead of waiting for the
+          // next unrelated store change (which may never come).
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(sync, Math.max(0, lastStopAt + STOP_COOLDOWN_MS - now) + 20)
+          return
+        }
+        if (now < retryAfter) return
+        const ok = KeepAlive.start(title, text)
+        running = ok
+        if (ok) {
+          shown = label
+          failStreak = 0
+          retryAfter = 0
+        } else {
+          failStreak += 1
+          const delay = nextBackoffMs(failStreak)
+          retryAfter = now + delay
+          // Nothing else will nudge us when the backoff expires, so schedule the retry ourselves.
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(sync, delay + 20)
+        }
+      } else {
+        shown = label
+      }
     }
     const offChat = useChat.subscribe(sync)
     const offSettings = useSettings.subscribe(sync)
@@ -113,7 +159,11 @@ function useKeepAlive() {
       offChat()
       offSettings()
       offApp.remove()
-      if (running) KeepAlive.stop()
+      if (timer) clearTimeout(timer)
+      if (running) {
+        KeepAlive.stop()
+        lastStopAt = Date.now()
+      }
     }
   }, [])
 }

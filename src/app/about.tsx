@@ -1,4 +1,5 @@
 import Constants from 'expo-constants'
+import * as Clipboard from 'expo-clipboard'
 import { Stack } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import { BookOpen, Bug, Code2, MessageCircle } from '@/components/icons'
@@ -15,6 +16,7 @@ import { useRuntime } from '@/lib/hermes'
 import { space } from '@/theme'
 
 import type { LastExit } from '../../modules/hermes-keepalive'
+import { KeepAlive } from '../../modules/hermes-keepalive'
 
 export default function AboutScreen() {
   const t = useT()
@@ -49,6 +51,20 @@ export default function AboutScreen() {
               await copyExitReport(crash)
               acknowledgeExit()
               setCrash(null)
+              toast(t('Copied'), 'success')
+            }}
+            last
+          />
+        </Section>
+      ) : null}
+      {KeepAlive.lastStartError() ? (
+        <Section title={t('Diagnostics')}>
+          <Row
+            icon={Bug}
+            title={t('Background service')}
+            subtitle={KeepAlive.lastStartError() ?? ''}
+            onPress={() => {
+              void Clipboard.setStringAsync(KeepAlive.lastStartError() ?? '')
               toast(t('Copied'), 'success')
             }}
             last

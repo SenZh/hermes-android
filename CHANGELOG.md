@@ -1,5 +1,30 @@
 # 更新日志 (Changelog)
 
+## [v1.8.3-preview.19] - 2026-10-26
+
+### 🛠 缺陷修复 (Fixes)
+
+- **修复前台服务 5 秒超时闪退（`ForegroundServiceDidNotStartInTimeException`）**：
+  - 根因：系统对每次 `startForegroundService()` 记账，必须在数秒内 `startForeground()`；此前 `ensureChannel`/`build` 在 try 之外、catch 里直接 `stopSelf()`、看门狗到点 `stopService()`、模块 `OnDestroy` 停服，四条路径都会让这条要求永远无法满足；
+  - `onStartCommand` 首条语句即 `startForeground()`，失败改用最小系统通知重试，不再提前 `stopSelf`；
+  - 投递前增加 preflight：通知渠道不可用则不投递（不投递 = 系统不记账 = 不可能超时）；
+  - 看门狗改为只上报不改生命周期；服务启动窗口内的停止请求改为带 TTL 的延迟停止，由服务在提升前台后自己执行；
+  - JS 侧补 300ms 停服冷却与指数退避（1s→30s 封顶），并修掉"服务已死但仍被当作在跑"的裂脑分支。
+- **修复 SAF 下载落盘失败与覆盖误删目录**：
+  - 根因：`new File(dir, name)` 是纯字符串拼路径，SAF 下会被 `DocumentFile.fromTreeUri` 解析成**目录本身**（后续路径段被丢弃），首次下载即抛 `InvalidTypeFileException`，选"覆盖"更会递归删除整个所选文件夹；
+  - 改为 `copy(targetDir, { overwrite })`，由底层 `DocumentFile.createFile` 建出真实文档；
+  - 落盘后回目录按名字认领**真实 document URI** 写入记录，修复"下载成功但重进仍显示下载按钮"。
+- **修复目录选择器"取消"被当成错误弹窗**：expo 以 `PickerCancelledException` 抛取消，现改为静默返回。
+- **修复已下载状态被反向退回"下载"**：存在性探测失败时降级为"文件可能已被移动"，不再清空记录。
+- **关于页新增后台服务诊断项**：前台服务启动失败的原因可直接查看并复制。
+
+### ✅ 工程
+
+- 新增 `src/lib/keepAlivePolicy.ts` 纯逻辑模块（冷却 + 退避），由 11 项单测真实 `import` 覆盖；
+- 新增 `src/lib/downloadManager.ts` 的 `pickCreatedEntry` / `isPickerCancelled` 与对应用例；
+- `verify-fixes.mjs` 新增 Test 23（前台服务提升顺序与 preflight 接线，含去注释后比下标的结构断言）；
+- 单测 63 项、回归套件 23 项全绿。
+
 ## [v1.8.3-preview.17] - 2026-10-26
 
 ### 🚀 新增功能 (Features)

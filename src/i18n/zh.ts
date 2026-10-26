@@ -711,6 +711,7 @@ export const zh: Record<string, string> = {
   'Open folder': '打开所在目录',
   'The saved file could not be located. Use “Open folder”.': '找不到已保存的文件，请用「打开所在目录」。',
   'file may have been moved': '文件可能已被移动',
+  'Background service': '后台服务',
   'Download directory not set.': '未设置下载目录。',
   'Saved folder: {folder}': '保存目录：{folder}',
   'File already exists': '文件已存在',

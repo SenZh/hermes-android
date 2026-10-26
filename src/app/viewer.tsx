@@ -18,6 +18,7 @@ import { useRest } from '@/lib/hooks'
 import {
   calculateDownloadSpeed,
   getDownloadStorageKey,
+  isPickerCancelled,
   pickCreatedEntry,
   resolveFileNameConflict,
   safeParseDownloadRecord,
@@ -196,8 +197,14 @@ export default function DocumentViewerScreen() {
       // 1. 前置选目录：每次都弹系统目录选择器，默认定位到上次用过的目录，用户可随时切换。
       //    未确认目录前不发起任何网络请求，取消则零流量消耗。
       const lastDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
-      const picked = await Directory.pickDirectoryAsync(lastDirUri ?? undefined)
-      if (!picked || !picked.uri) return
+      let picked: Directory
+      try {
+        picked = await Directory.pickDirectoryAsync(lastDirUri ?? undefined)
+      } catch (e) {
+        // 取消不是错误：expo 以 PickerCancelledException 抛出，必须静默返回
+        if (isPickerCancelled(e)) return
+        throw e
+      }
       const targetDirUri = picked.uri
       if (targetDirUri !== lastDirUri) await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
 
@@ -315,10 +322,12 @@ export default function DocumentViewerScreen() {
       }
 
       // 4. 落盘至外部目标目录
-      // copy 的 overwrite 选项让底层 SAF 策略先 deleteRecursively 旧文档再写入，
-      // 既不依赖拼出来的伪子 URI，也不会被 DocumentFile 自动加 " (1)" 后缀。
-      const finalDestFile = new File(targetDir, finalTargetName)
-      await downloadedLocalFile.copy(finalDestFile, { overwrite: shouldOverwrite })
+      // 目标必须传 Directory 而不是 new File(dir, name)：SAF 下前者走
+      // CopyMoveStrategy.SAF 的 container 分支，由底层 DocumentFile.createFile 建出真实
+      // document 并写入；后者只是 Tree URI 拼路径，会被 DocumentFile.fromTreeUri 解析成
+      // 目录本身（exists()==true 且 isDirectory()==true），首次下载即抛
+      // InvalidTypeFileException，覆盖分支更会删掉整个所选目录。
+      await downloadedLocalFile.copy(targetDir, { overwrite: shouldOverwrite })
 
       // 及时清理私有缓存中的临时下载副本，释放手机内部空间
       try {

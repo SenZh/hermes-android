@@ -116,19 +116,29 @@ export function pickCreatedEntry(
   const before = new Set(beforeNames)
   const named = (e: SafEntryLike) => e.name !== null && e.name === wantedName
 
-  // 1. 普通落盘：想要的这个名字是新出现的条目
-  const fresh = after.find((e) => named(e) && !before.has(e.name as string))
-  if (fresh) return fresh
+  // 1. 名字匹配优先。走 Directory 作目标的 copy 时，native 会先删同名再重建，名字不变，
+  //    所以这是常态路径，也避免"外部程序恰好写入一个文件"被误认领。
+  const match = after.find(named)
+  if (match) return match
 
-  // 2. 只多出一个条目：不管它叫什么，就是它（SAF 自动加 " (1)" 后缀的情形）
+  // 2. 名字对不上但只多出一个条目：只能是 SAF 自己改了名
   const added = after.filter((e) => e.name !== null && !before.has(e.name))
-  if (added.length === 1) return added[0]
+  return added.length === 1 ? added[0] : null
+}
 
-  // 3. 没有新增条目但名字对得上：覆盖写回复用了同一个文档
-  if (added.length === 0) return after.find(named) ?? null
-
-  // 4. 多出多个条目且名字对不上：无法判定，交给调用方兜底
-  return null
+/**
+ * 纯函数：判断一个异常是否"用户在系统选择器里点了取消"。
+ *
+ * expo 的 pickDirectoryAsync 在取消时抛 PickerCancelledException（message 为
+ * "The file picker was cancelled by the user"），不是返回 null —— 不识别它就会把
+ * 用户的正常取消当成错误弹给用户。
+ */
+export function isPickerCancelled(error: unknown): boolean {
+  if (!error) return false
+  const e = error as { code?: unknown; message?: unknown }
+  const code = typeof e.code === 'string' ? e.code : ''
+  const message = typeof e.message === 'string' ? e.message : String(error)
+  return /cancel/i.test(code) || /cancel/i.test(message)
 }
 
 /**

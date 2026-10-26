@@ -13,6 +13,7 @@ interface HermesKeepAliveModule {
   stop(): void
   lastExit(): LastExit | null
   acknowledgeExit(): void
+  lastStartError(): string | null
 }
 
 // Android only; elsewhere (web, Expo Go) every call is a no-op.
@@ -24,6 +25,8 @@ export const KeepAlive = {
   start: (title: string, text: string) => native?.start(title, text) ?? false,
   update: (title: string, text: string) => native?.update(title, text) ?? false,
   stop: () => native?.stop(),
+  /** Why the last foreground promotion failed; null when it succeeded. */
+  lastStartError: (): string | null => native?.lastStartError() ?? null,
 }
 
 /** Report of the last unexpected exit; null when absent, already seen, or unsupported. */

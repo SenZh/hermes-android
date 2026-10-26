@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   calculateDownloadSpeed,
   getDownloadStorageKey,
+  isPickerCancelled,
   pickCreatedEntry,
   resolveFileNameConflict,
   safeParseDownloadRecord,
@@ -78,15 +79,25 @@ describe('DownloadManager: pickCreatedEntry', () => {
     expect(picked?.uri).toBe('content://d/app-v2')
   })
 
-  it('[TC-DL-15] SAF 自动改名：名字不匹配时认领唯一新增条目', () => {
-    // Android DocumentFile.createFile 遇重名会自动生成 "app (1).apk"
+  it('[TC-DL-19] 名字匹配优先于“新增条目”启发式，防止外部写入被误认领', () => {
+    // 覆盖写回时同名条目一直在，同时外部程序写入了 extra.txt：
+    // 必须认领同名条目，不能因为"多了一个新条目"就认领 extra.txt
     const picked = pickCreatedEntry(
       ['app.apk'],
-      [entry('app.apk', 'content://d/app'), entry('app (1).apk', 'content://d/app-1')],
+      [entry('app.apk', 'content://d/app-v2'), entry('extra.txt', 'content://d/extra')],
       'app.apk',
     )
-    expect(picked?.name).toBe('app (1).apk')
-    expect(picked?.uri).toBe('content://d/app-1')
+    expect(picked?.uri).toBe('content://d/app-v2')
+  })
+
+  it('[TC-DL-20] 新增多个条目且名字对不上时返回 null', () => {
+    expect(
+      pickCreatedEntry(
+        ['a'],
+        [entry('a', 'content://d/a'), entry('b', 'content://d/b'), entry('c', 'content://d/c')],
+        'd',
+      ),
+    ).toBeNull()
   })
 
   it('[TC-DL-16] 空目录：只有一个条目时直接认领', () => {
@@ -94,16 +105,28 @@ describe('DownloadManager: pickCreatedEntry', () => {
     expect(picked?.uri).toBe('content://d/app')
   })
 
-  it('[TC-DL-17] 无法判定：新增多个条目且名字对不上时返回 null', () => {
-    expect(
-      pickCreatedEntry(['a'], [entry('a', 'content://d/a'), entry('b', 'content://d/b'), entry('c', 'content://d/c')], 'd'),
-    ).toBeNull()
+  it('[TC-DL-17] 无法判定：没有名字匹配也没有唯一新增时返回 null', () => {
     expect(pickCreatedEntry(['a'], [entry('a', 'content://d/a')], 'b')).toBeNull()
   })
 
   it('[TC-DL-18] 空名字条目被忽略，不参与认领', () => {
     const picked = pickCreatedEntry([], [{ name: null, uri: 'content://d/x' }, entry('k.txt', 'content://d/k')], 'k.txt')
     expect(picked?.uri).toBe('content://d/k')
+  })
+})
+
+describe('DownloadManager: isPickerCancelled', () => {
+  it('[TC-DL-21] 识别 expo 选择器取消异常', () => {
+    expect(isPickerCancelled(new Error('The file picker was cancelled by the user'))).toBe(true)
+    expect(isPickerCancelled({ code: 'ERR_PICKER_CANCELLED' })).toBe(true)
+    expect(isPickerCancelled({ code: 'ERR_PICKER_CANCELED', message: '' })).toBe(true)
+  })
+
+  it('[TC-DL-22] 真实错误不被误判为取消', () => {
+    expect(isPickerCancelled(new Error('Destination already exists'))).toBe(false)
+    expect(isPickerCancelled({ code: 'ERR_UNKNOWN', message: 'Unable to copy file or directory' })).toBe(false)
+    expect(isPickerCancelled(null)).toBe(false)
+    expect(isPickerCancelled(undefined)).toBe(false)
   })
 })
 
