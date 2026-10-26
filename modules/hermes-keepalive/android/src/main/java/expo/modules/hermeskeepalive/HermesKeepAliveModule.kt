@@ -92,11 +92,13 @@ class HermesKeepAliveModule : Module() {
       // A stop landing while the start is still in flight would be the crash path itself. Hand the
       // request to the service, which performs it right after the foreground promotion. UNCONFIRMED
       // counts too: the system may still be inside its promotion window.
-      if (KeepAliveService.state == ServiceState.STARTING || KeepAliveService.state == ServiceState.UNCONFIRMED) {
+      val deferred = KeepAliveService.state == ServiceState.STARTING ||
+        KeepAliveService.state == ServiceState.UNCONFIRMED
+      if (deferred) {
         KeepAliveService.requestStop()
-        return@Function
+      } else {
+        context.stopService(Intent(context, KeepAliveService::class.java))
       }
-      context.stopService(Intent(context, KeepAliveService::class.java))
     }
 
     OnDestroy {
