@@ -1,6 +1,6 @@
 # 更新日志 (Changelog)
 
-## [v1.8.3-preview.5] - 2026-10-26
+## [v1.8.3-preview.6] - 2026-10-26
 
 ### 🚀 新增功能 (Features)
 - **版本号信息与自动检查更新**：
@@ -26,6 +26,9 @@
   - 【下载】与【系统分享】按键彻底解耦为两个独立原生操作。
 
 ### 🛠 体验优化与缺陷修复 (Fixes & Improvements)
+- **修复二进制大文件与 APK 下载报错 (FileNotFoundException)**：
+  - 修复 `viewer.tsx` 中下载完成后读取临时缓存的 URI 格式问题，直接通过 `downloadedFile.base64()` 稳定读取；
+  - 增加大文件保护门禁：超过 4MB 的非文本/二进制大文件（如 82MB 的 APK 包）禁止进行前台文本解码，友好提示“文件过大，请直接点击右上角下载”，避免内存溢出与解析异常。
 - **彻底消除 409 (client_upgrade_required) 报错**：
   - 会话重命名（PATCH）与删除（DELETE）请求中完整注入 `request_id` 与 `expected_revision` 安全栅栏参数，老网关忽略、新网关放行，双向 100% 兼容。
 - **安装包双重签名修复 (v1 + v2 全兼容)**：

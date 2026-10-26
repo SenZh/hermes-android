@@ -68,9 +68,12 @@ export default function DocumentViewerScreen() {
 
   const mime = q.data?.mime_type ?? ''
   const b64 = q.data?.data_url ? q.data.data_url.slice(q.data.data_url.indexOf(',') + 1) : ''
+  const isLarge = (q.data?.size ?? 0) > 4 * 1024 * 1024
+
   const isText =
-    /^text\/|json|yaml|xml|javascript|typescript|x-sh|toml/.test(mime) ||
-    /\.(md|txt|py|ts|tsx|js|json|ya?ml|toml|sh|log|ini|cfg|env|rs|go|java|kt|c|h|cpp|css|html|sql|xml|patch|diff)$/i.test(fileName)
+    !isLarge &&
+    (/^text\/|json|yaml|xml|javascript|typescript|x-sh|toml/.test(mime) ||
+      /\.(md|txt|py|ts|tsx|js|json|ya?ml|toml|sh|log|ini|cfg|env|rs|go|java|kt|c|h|cpp|css|html|sql|xml|patch|diff)$/i.test(fileName))
 
   let text = ''
   if (isText && b64) {
@@ -108,12 +111,10 @@ export default function DocumentViewerScreen() {
       const tempDest = new File(Paths.cache, fileName)
       if (tempDest.exists) tempDest.delete()
       const url = hermes().rest.url('/api/files/download', { path: normalized })
-      await File.downloadFileAsync(url, tempDest, { headers: await hermes().authHeaders() })
+      const downloadedFile = await File.downloadFileAsync(url, tempDest, { headers: await hermes().authHeaders() })
 
-      // 2. 读取临时文件的 base64 内容
-      const base64Content = await FileSystem.readAsStringAsync(tempDest.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      })
+      // 2. 读取临时文件的 base64 内容（从下载完成返回的 File 实例直接读取）
+      const base64Content = await downloadedFile.base64()
 
       const fileMime = mime || 'application/octet-stream'
 
@@ -216,7 +217,13 @@ export default function DocumentViewerScreen() {
         )
       ) : null}
 
-      {q.data && !isText && !mime.startsWith('image/') ? (
+      {q.data && isLarge ? (
+        <View style={{ padding: space.lg, alignItems: 'center' }}>
+          <Text tone="muted">{t('Too large to preview. Download it instead.')}</Text>
+        </View>
+      ) : null}
+
+      {q.data && !isText && !isLarge && !mime.startsWith('image/') ? (
         <View style={{ padding: space.lg, alignItems: 'center' }}>
           <Text tone="muted">{t('No preview for {mime}.', { mime: mime || t('this file type') })}</Text>
         </View>

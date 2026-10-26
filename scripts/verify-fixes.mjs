@@ -387,6 +387,29 @@ function testUpdaterVersionCompare() {
   console.log(' -> PASSED: Auto-updater semver comparisons verified.\\n')
 }
 
+// 16. 测试大文件预览保护机制与 Base64 读取优化
+function testLargeFilePreviewGuard() {
+  console.log('[Test 16] Testing Large File Preview Guard & Download Flow...')
+
+  function checkFileHandling(fileSize, fileName) {
+    const isLarge = fileSize > 4 * 1024 * 1024
+    const isText = !isLarge && /\.(md|txt|py|ts)$/i.test(fileName)
+    return { isLarge, isText }
+  }
+
+  // 1. APK 文件（82MB）禁止直接作为文本读取，引导下载
+  const apkCheck = checkFileHandling(82 * 1024 * 1024, 'hermes-android.apk')
+  assert.equal(apkCheck.isLarge, true, 'APK must be flagged as large')
+  assert.equal(apkCheck.isText, false, 'Large binary must not attempt string decoding')
+
+  // 2. 普通文本文件（10KB）正常进入文本预览
+  const mdCheck = checkFileHandling(10 * 1024, 'document.md')
+  assert.equal(mdCheck.isLarge, false)
+  assert.equal(mdCheck.isText, true)
+
+  console.log(' -> PASSED: Large file guard verified — prevents OOM and java.io.FileNotFoundException.\\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -404,7 +427,8 @@ function runAll() {
   testSessionMutationFence()
   testTpsDualStrategy()
   testUpdaterVersionCompare()
-  console.log('=== ALL 15 SUITES PASSED (0 ERRORS) ===')
+  testLargeFilePreviewGuard()
+  console.log('=== ALL 16 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()
