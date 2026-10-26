@@ -357,10 +357,7 @@ export function SessionMenu({ visible, onClose, session, onPickModel, onPickReas
               const stored = session.storedId
               await closeRuntime(sid)
               if (stored) {
-                const reqId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-                await rest().del(`/api/sessions/${encodeURIComponent(stored)}`, undefined, {
-                  query: { request_id: reqId, expected_revision: 0 },
-                })
+                await rest().post('/api/sessions/bulk-delete', { ids: [stored] })
               }
               toast(t('Deleted'), 'success')
             })}

@@ -155,15 +155,14 @@ export default function SessionsScreen() {
     )
     if (!ok) return false
     try {
+      // 1. 关闭本地打开的运行时连接
       for (const row of targets) {
         const rid = useChat.getState().storedToRuntime[row.id]
         if (rid) await closeRuntime(rid)
-        const reqId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-        const rev = (row as any).runtime_revision ?? (row as any).revision ?? 0
-        await rest().del(`/api/sessions/${encodeURIComponent(row.id)}`, undefined, {
-          query: { request_id: reqId, expected_revision: rev },
-        })
       }
+      // 2. 调用后端统一的 bulk-delete 事务删除接口，彻底免除单个 DELETE 的 not_found/栅栏冲突
+      const ids = targets.map((r) => r.id)
+      await rest().post('/api/sessions/bulk-delete', { ids })
       toast(targets.length === 1 ? t('Deleted') : t('{n} chats deleted', { n: targets.length }), 'success')
     } catch (e) {
       toastError(e)

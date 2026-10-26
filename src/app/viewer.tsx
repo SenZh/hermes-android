@@ -92,6 +92,7 @@ export default function DocumentViewerScreen() {
       const dest = new File(Paths.cache, fileName)
       if (dest.exists) dest.delete()
       const url = hermes().rest.url('/api/files/download', { path: normalized })
+      toast(t('Preparing file…'), 'info')
       const file = await File.downloadFileAsync(url, dest, { headers: await hermes().authHeaders() })
       await Sharing.shareAsync(file.uri, { mimeType: mime || undefined })
     } catch (e) {
@@ -107,20 +108,11 @@ export default function DocumentViewerScreen() {
     try {
       if (Platform.OS === 'web') return toast(t('Downloading is available in the Android app.'), 'info')
 
-      // 1. 先下载到应用内部临时缓存
-      const tempDest = new File(Paths.cache, fileName)
-      if (tempDest.exists) tempDest.delete()
-      const url = hermes().rest.url('/api/files/download', { path: normalized })
-      const downloadedFile = await File.downloadFileAsync(url, tempDest, { headers: await hermes().authHeaders() })
-
-      // 2. 读取临时文件的 base64 内容（从下载完成返回的 File 实例直接读取）
-      const base64Content = await downloadedFile.base64()
-
-      const fileMime = mime || 'application/octet-stream'
-
-      // 3. 检查是否有已保存授权的目录
+      // 1. 检查是否有已保存授权的目录
       let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
       let fileUri: string | null = null
+
+      const fileMime = mime || 'application/octet-stream'
 
       if (targetDirUri) {
         try {
@@ -132,12 +124,10 @@ export default function DocumentViewerScreen() {
         }
       }
 
-      // 4. 若无有效目录，唤起系统目录授权选择器（默认可选择 Downloads 目录）
+      // 2. 若无有效目录，唤起系统目录授权选择器（默认可选择 Downloads 目录）
       if (!fileUri) {
         const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync()
         if (!permissions.granted) {
-          // 用户取消了选择
-          if (tempDest.exists) tempDest.delete()
           return
         }
         targetDirUri = permissions.directoryUri
@@ -145,15 +135,19 @@ export default function DocumentViewerScreen() {
         fileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
       }
 
-      // 5. 写入公共文件系统
-      await FileSystem.writeAsStringAsync(fileUri, base64Content, {
-        encoding: FileSystem.EncodingType.Base64,
+      toast(t('Downloading {name}…', { name: fileName }), 'info')
+
+      // 3. 流式下载并直接落盘写入目标 URI（避免在 JS 内存中读取几十 MB 的 base64 导致 OOM）
+      const url = hermes().rest.url('/api/files/download', { path: normalized })
+      const downloaded = await FileSystem.downloadAsync(url, fileUri, {
+        headers: await hermes().authHeaders(),
       })
 
-      // 6. 清理临时缓存
-      if (tempDest.exists) tempDest.delete()
-
-      toast(t('Saved to device: {name}', { name: fileName }), 'success')
+      if (downloaded.status >= 200 && downloaded.status < 300) {
+        toast(t('Saved to device: {name}', { name: fileName }), 'success')
+      } else {
+        throw new Error(`Download failed with status ${downloaded.status}`)
+      }
     } catch (e) {
       toastError(e)
     }

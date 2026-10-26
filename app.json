@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hermes",
     "slug": "hermes-android",
-    "version": "1.8.3-preview.6",
+    "version": "1.8.3-preview.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "hermes",

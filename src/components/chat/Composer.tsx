@@ -275,6 +275,9 @@ export const Composer = memo(function Composer(props: Props) {
       if (camera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync()
         if (!perm.granted) return toast(t('Camera permission is needed.'), 'warn')
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+        if (!perm.granted) return toast(t('Photo library permission is needed.'), 'warn')
       }
       const res = camera ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts)
       if (res.canceled) return
