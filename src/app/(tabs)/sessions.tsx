@@ -155,15 +155,13 @@ export default function SessionsScreen() {
     )
     if (!ok) return false
     try {
-      // 1. 关闭本地打开的运行时连接
+      const profile = hermes().profile ?? null
       for (const row of targets) {
         const rid = useChat.getState().storedToRuntime[row.id]
         if (rid) await closeRuntime(rid)
+        // 通过 gateway 实时网关协议执行 session.delete，彻底绕开离线维护独占锁（Exclusive maintenance）
+        await rpc().request('session.delete', { session_id: row.id, profile })
       }
-      // 2. 调用后端统一的 bulk-delete 事务删除接口，携带显式的 profile 参数
-      const ids = targets.map((r) => r.id)
-      const profile = hermes().profile ?? 'default'
-      await rest().post('/api/sessions/bulk-delete', { ids, profile })
       toast(targets.length === 1 ? t('Deleted') : t('{n} chats deleted', { n: targets.length }), 'success')
     } catch (e) {
       toastError(e)

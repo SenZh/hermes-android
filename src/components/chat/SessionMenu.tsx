@@ -357,8 +357,8 @@ export function SessionMenu({ visible, onClose, session, onPickModel, onPickReas
               const stored = session.storedId
               await closeRuntime(sid)
               if (stored) {
-                const profile = hermes().profile ?? 'default'
-                await rest().post('/api/sessions/bulk-delete', { ids: [stored], profile })
+                const profile = hermes().profile ?? null
+                await rpc().request('session.delete', { session_id: stored, profile })
               }
               toast(t('Deleted'), 'success')
             })}

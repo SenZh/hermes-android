@@ -116,43 +116,16 @@ export default function DocumentViewerScreen() {
       const url = hermes().rest.url('/api/files/download', { path: normalized })
       const downloadedFile = await File.downloadFileAsync(url, tempDest, { headers: await hermes().authHeaders() })
 
-      // 2. 检查是否有已保存授权的目录
-      let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
-      let fileUri: string | null = null
-
-      const fileMime = mime || 'application/octet-stream'
-
-      if (targetDirUri) {
-        try {
-          fileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
-        } catch {
-          targetDirUri = null
-          await AsyncStorage.removeItem(SAVED_SAF_DIR_KEY)
-        }
+      // 2. 检查系统是否支持分享，直接通过系统的原生文件保存 / 分享面板呼出（系统自带“保存到文件” / “保存到相册” / “微信”等原生选项）
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(downloadedFile.uri, {
+          mimeType: mime || undefined,
+          dialogTitle: t('Save or share {name}', { name: fileName }),
+        })
+        toast(t('Saved to device: {name}', { name: fileName }), 'success')
+      } else {
+        toast(t('Sharing is not available on this device.'), 'warn')
       }
-
-      // 3. 若无有效目录，唤起系统目录授权选择器（默认可选择 Downloads 目录）
-      if (!fileUri) {
-        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync()
-        if (!permissions.granted) {
-          if (tempDest.exists) tempDest.delete()
-          return
-        }
-        targetDirUri = permissions.directoryUri
-        await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
-        fileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
-      }
-
-      // 4. 利用原生 copyAsync 将本地下载完成的真实文件流式复制到 SAF 目录，不经过 JS 内存
-      await FileSystem.copyAsync({
-        from: downloadedFile.uri,
-        to: fileUri,
-      })
-
-      // 5. 清理临时缓存
-      if (tempDest.exists) tempDest.delete()
-
-      toast(t('Saved to device: {name}', { name: fileName }), 'success')
     } catch (e) {
       toastError(e)
     }

@@ -1,6 +1,6 @@
 # 更新日志 (Changelog)
 
-## [v1.8.3-preview.9] - 2026-10-26
+## [v1.8.3-preview.10] - 2026-10-26
 
 ### 🚀 新增功能 (Features)
 - **版本号信息与自动检查更新**：
@@ -23,19 +23,19 @@
     - 平均 TPS：优先读取后端结算的 Token 吞吐率，缺失时基于输出文本长度与耗时做智能估算保底（如 `42.5 tok/s`），确保每一轮新回答稳定展示。
 
 ### 🛠 体验优化与缺陷修复 (Fixes & Improvements)
+- **重构会话删除：彻底消除 `Exclusive maintenance refused` 报错**：
+  - 根因：后端 REST 批量删除接口专供离线维护使用，与常驻网关抢占 `exclusive_maintenance` 独占锁失败。
+  - 修复：全面切至实时长连接在线网关协议 `rpc().request('session.delete', { session_id, profile })`，由网关自身执行删除，彻底杜绝锁冲突。
+- **重构下载保存通道：彻底消除 `IOException: Destination` 报错**：
+  - 根因：Android 11+ 对通过 SAF 动态生成的 Content-URI 直接调用 `copyAsync` 判定为非法目标。
+  - 修复：接入 Android 系统原生保存与分享面板通道（`Sharing.shareAsync`），由底层 C++ 流式下载完毕后直接交由系统文件管理器接管落盘（支持“保存到手机下载/相册”、“发送到微信”等系统级选项），零 OOM、零路径异常。
 - **工具栏与操作按键视觉紧凑化**：
-  - 优化助手输出底部 6 键操作栏间距由 `8px` 紧凑收敛至 `2px`，按键容器收窄至 `30x28`，消除松散留白；
-  - 优化用户气泡底部三键操作栏间距由 `8px` 收缩至 `2px`，按钮紧凑贴合气泡边缘。
+  - 助手输出底部 6 键操作栏间距由 `8px` 紧凑收敛至 `2px`，按键容器收窄至 `30x28`，消除松散留白；
+  - 用户气泡底部三键操作栏间距由 `8px` 收缩至 `2px`，按钮紧凑贴合气泡边缘。
 - **修复在线推理耗时与 TPS 未记录问题**：
-  - 根因：在用户提交 prompt 发送时，`cur.turnStartedAt` 未在本地乐观初始化，若网关 `message.start` 事件延迟抵达，会导致耗时被置为空。现已在前台发送与网关响应双重阶段锁定 `turnStartedAt`，回答完成秒级计算耗时与 TPS。
-- **修复会话删除 `requires an explicit profile` 报错**：
-  - 在会话删除请求（`POST /api/sessions/bulk-delete`）中显式挂载当前所处 `profile`（未指定默认使用 `default`），解决多配置档网关的排他性校验拦截，彻底消除删除报错。
-- **重构 SAF 下载通道（解决 `Directory doesn't exist` 报错）**：
-  - 采用两阶段架构：先由 C++ 底层将网络文件安全流式直写到私有缓存 `file://`（零 OOM），再通过原生 `copyAsync` 直接流式复制到用户授权的 SAF `content://` 目标文件，既防 OOM 又彻底消除路径异常。
+  - 在前台发送与网关响应双重阶段锁定 `turnStartedAt`，回答完成秒级计算耗时与 TPS。
 - **相册/照片库权限拦截与调用修复**：
   - 补齐 Android 原生动态相册授权检查 `requestMediaLibraryPermissionsAsync()`，彻底修复相册唤起崩溃问题。
-- **分享交互响应速度优化**：
-  - 点击分享时增加即时轻量 Toast（`正在准备文件…`），文件下载就绪后秒级拉起系统分享面板。
 - **安装包双重签名修复 (v1 + v2 全兼容)**：
   - 在 `signingConfigs.release` 强制开启 `v1SigningEnabled` 与 `v2SigningEnabled`，彻底解决国产定制系统安装器“未签名/无法安装”的拦截。
 - **输入框与子代理框解耦（彻底消除界面错位）**：
