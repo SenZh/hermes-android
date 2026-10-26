@@ -31,6 +31,7 @@ import { openStored, useChat } from '@/store/chat'
 import { hhmm } from '@/lib/format'
 import { textOf, type ChatMessage, type Part, type ToolPart } from '@/lib/chat/types'
 import { speak } from '@/lib/voice'
+import { calculateTps, formatDuration } from '@/lib/metrics'
 import { useSettings } from '@/store/settings'
 import { motion, radius, space, useTheme } from '@/theme'
 
@@ -125,15 +126,7 @@ function Reasoning({ text, live }: { text: string; live: boolean }) {
   )
 }
 
-function formatDuration(ms: number) {
-  const totalSeconds = Math.max(1, Math.round(ms / 1000))
-  if (totalSeconds < 60) {
-    return `${totalSeconds}秒`
-  }
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return seconds > 0 ? `${minutes}分${seconds}秒` : `${minutes}分钟`
-}
+
 
 /** Long pasted prompts (logs, files) fold to a dozen lines so the reply stays in view. */
 function UserText({ text }: { text: string }) {
@@ -534,9 +527,9 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
             <Text variant="caption" tone="faint">
               {hhmm(message.at)}
             </Text>
-            {message.elapsedMs ? (
+            {message.elapsedMs && formatDuration(message.elapsedMs) ? (
               <Text variant="caption" tone="faint">
-                {t('Worked for {time}', { time: formatDuration(message.elapsedMs) })}
+                {t('Worked for {time}', { time: formatDuration(message.elapsedMs)! })}
                 {message.tps ? ` · ${message.tps} tok/s` : ''}
               </Text>
             ) : null}
