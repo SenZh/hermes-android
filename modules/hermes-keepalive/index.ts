@@ -14,6 +14,8 @@ interface HermesKeepAliveModule {
   lastExit(): LastExit | null
   acknowledgeExit(): void
   lastStartError(): string | null
+  openFile(uri: string, mimeType?: string): boolean
+  openFolder(dirUri: string): boolean
 }
 
 // Android only; elsewhere (web, Expo Go) every call is a no-op.
@@ -27,6 +29,10 @@ export const KeepAlive = {
   stop: () => native?.stop(),
   /** Why the last foreground promotion failed; null when it succeeded. */
   lastStartError: (): string | null => native?.lastStartError() ?? null,
+  /** Open a content:// or file:// URI with system viewer/installer. */
+  openFile: (uri: string, mimeType?: string) => native?.openFile(uri, mimeType) ?? false,
+  /** Open a SAF tree URI folder directly in DocumentsUI / File Manager. */
+  openFolder: (dirUri: string) => native?.openFolder(dirUri) ?? false,
 }
 
 /** Report of the last unexpected exit; null when absent, already seen, or unsupported. */

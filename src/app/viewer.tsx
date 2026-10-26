@@ -18,12 +18,14 @@ import { useRest } from '@/lib/hooks'
 import {
   calculateDownloadSpeed,
   getDownloadStorageKey,
+  inferMimeType,
   isPickerCancelled,
   pickCreatedEntry,
   resolveFileNameConflict,
   safeParseDownloadRecord,
   type StoredDownloadRecord,
 } from '@/lib/downloadManager'
+import { KeepAlive } from '../../modules/hermes-keepalive'
 import { radius, space, useTheme } from '@/theme'
 
 function decodeBase64Utf8(b64: string) {
@@ -153,7 +155,7 @@ export default function DocumentViewerScreen() {
   // 真正的文件落盘保存（保存到外部公共存储 Downloads 目录）
   const SAVED_SAF_DIR_KEY = 'hermes_download_saf_dir_uri'
 
-  // 打开已落盘的文件
+  // 打开已落盘的文件（调起系统默认打开方式/安装器，绝不走 expo-sharing 报 scheme 错误）
   async function openFile() {
     if (!downloadRecord) return
     if (!downloadRecord.targetUri) {
@@ -161,11 +163,9 @@ export default function DocumentViewerScreen() {
       return
     }
     try {
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(downloadRecord.targetUri, {
-          mimeType: mime || undefined,
-          dialogTitle: t('Open {name}', { name: downloadRecord.fileName }),
-        })
+      const resolvedMime = inferMimeType(downloadRecord.fileName, mime)
+      if (Platform.OS === 'android' && KeepAlive.available) {
+        KeepAlive.openFile(downloadRecord.targetUri, resolvedMime)
       } else {
         await Linking.openURL(downloadRecord.targetUri)
       }
@@ -174,7 +174,7 @@ export default function DocumentViewerScreen() {
     }
   }
 
-  // 打开已落盘的所在目录
+  // 打开已落盘的所在目录（定向调起系统文件管理器，绝不唤起 Google 等无关 App）
   async function openFolder() {
     const dirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
     if (!dirUri) {
@@ -182,7 +182,11 @@ export default function DocumentViewerScreen() {
       return
     }
     try {
-      await Linking.openURL(dirUri)
+      if (Platform.OS === 'android' && KeepAlive.available) {
+        KeepAlive.openFolder(dirUri)
+      } else {
+        await Linking.openURL(dirUri)
+      }
     } catch {
       toast(t('Saved folder: {folder}', { folder: downloadRecord?.targetFolder || 'Downloads' }), 'info')
     }

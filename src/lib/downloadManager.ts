@@ -83,6 +83,30 @@ export function calculateDownloadSpeed(
 }
 
 /**
+ * 纯函数：根据文件名推断准确的 MIME 类型（支持 APK 原生安装、PDF、压缩包等）。
+ */
+export function inferMimeType(fileName: string, serverMime?: string): string {
+  if (serverMime && serverMime !== 'application/octet-stream' && serverMime !== '*/*') {
+    return serverMime
+  }
+  const lower = fileName.toLowerCase()
+  if (lower.endsWith('.apk')) return 'application/vnd.android.package-archive'
+  if (lower.endsWith('.pdf')) return 'application/pdf'
+  if (lower.endsWith('.zip')) return 'application/zip'
+  if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) return 'application/gzip'
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.gif')) return 'image/gif'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.mp4')) return 'video/mp4'
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.txt') || lower.endsWith('.log')) return 'text/plain'
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html'
+  if (lower.endsWith('.json')) return 'application/json'
+  return serverMime || '*/*'
+}
+
+/**
  * 纯函数：生成持久化存储的 Key
  */
 export function getDownloadStorageKey(path: string): string {

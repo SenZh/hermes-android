@@ -3,8 +3,10 @@ package expo.modules.hermeskeepalive
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -106,6 +108,70 @@ class HermesKeepAliveModule : Module() {
       // a start is still pending is the exact shape of the crash this module guards against.
       handler.removeCallbacks(watchdog)
       if (KeepAliveService.state == ServiceState.UNCONFIRMED) KeepAliveService.state = ServiceState.IDLE
+    }
+
+    /**
+     * Open a content:// or file:// URI with the system's default viewer or installer.
+     * Uses FLAG_GRANT_READ_URI_PERMISSION so external apps can read SAF documents.
+     */
+    Function("openFile") { uriString: String, mimeType: String? ->
+      val uri = Uri.parse(uriString)
+      val type = if (!mimeType.isNullOrBlank()) {
+        mimeType
+      } else {
+        context.contentResolver.getType(uri) ?: "*/*"
+      }
+      val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, type)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      try {
+        context.startActivity(intent)
+      } catch (_: Exception) {
+        val chooser = Intent.createChooser(intent, "Open").apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+      }
+      true
+    }
+
+    /**
+     * Open a folder (SAF tree URI) directly in the system's file manager / DocumentsUI.
+     * Specifying DocumentsContract.Document.MIME_TYPE_DIR ensures only real file managers respond,
+     * preventing apps like Google from claiming the content intent.
+     */
+    Function("openFolder") { dirUriString: String ->
+      val uri = Uri.parse(dirUriString)
+      val docUri = try {
+        if (DocumentsContract.isTreeUri(uri)) {
+          DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
+        } else {
+          uri
+        }
+      } catch (_: Exception) {
+        uri
+      }
+      val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(docUri, DocumentsContract.Document.MIME_TYPE_DIR)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      try {
+        context.startActivity(intent)
+      } catch (_: Exception) {
+        val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+          data = uri
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val chooser = Intent.createChooser(fallbackIntent, "Open folder").apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+      }
+      true
     }
   }
 

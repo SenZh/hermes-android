@@ -1,5 +1,16 @@
 # 更新日志 (Changelog)
 
+## [v1.8.3-preview.21] - 2026-10-26
+
+### 🛠 缺陷修复 (Fixes)
+
+- **原生重构【打开文件】：彻底根除 `ExpoSharing.shareAsync` 导致的 `content://` 崩溃**：
+  - 根因：`openFile` 原本调用了 `expo-sharing`，而其 Android 源码硬编码 `if ("file" != uri.scheme) throw InvalidArgumentException("Only local file URLs are supported...")`，传入 SAF 落盘的 `content://` 协议时直接报错闪退；
+  - 修复：接入原生 `HermesKeepAlive.openFile`，直接发起原生 `ACTION_VIEW` Intent，赋予 `FLAG_GRANT_READ_URI_PERMISSION` 并根据文件后缀精确识别 MIME 类型（APK 识别为 `application/vnd.android.package-archive`，点击直接唤起系统安装器，普通文档唤起系统查看器），彻底解耦分享与打开。
+- **原生定向【打开所在目录】：彻底根除呼出 Google 等无关 App 的弹窗**：
+  - 根因：原本调用通用的 `Linking.openURL(dirUri)`，系统向全局应用广播未指定类型的 content 协议，被注册了通用过滤器的 Google 应用拦截并弹出“想要打开Google”授权提示；
+  - 修复：接入原生 `HermesKeepAlive.openFolder`，构造针对 Document 的显式 Intent 并绑定 `DocumentsContract.Document.MIME_TYPE_DIR`，定向呼出系统文件管理器（DocumentsUI / Files），杜绝第三方应用抢占。
+
 ## [v1.8.3-preview.20] - 2026-10-26
 
 ### 🛠 缺陷修复 (Fixes)

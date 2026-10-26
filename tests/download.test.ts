@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   calculateDownloadSpeed,
   getDownloadStorageKey,
+  inferMimeType,
   isPickerCancelled,
   pickCreatedEntry,
   resolveFileNameConflict,
@@ -155,5 +156,20 @@ describe('DownloadManager: safeParseDownloadRecord', () => {
     expect(res?.fileName).toBe('test.apk')
     expect(res?.targetFolder).toBe('Downloads')
     expect(res?.fileSize).toBe(1048576)
+  })
+})
+
+describe('DownloadManager: inferMimeType', () => {
+  it('[TC-DL-23] 精确推断 APK 安装包类型', () => {
+    expect(inferMimeType('hermes-preview.apk')).toBe('application/vnd.android.package-archive')
+    expect(inferMimeType('APP.APK', 'application/octet-stream')).toBe('application/vnd.android.package-archive')
+  })
+
+  it('[TC-DL-24] 保留服务器已知合法类型，补齐常见文档与媒体类型', () => {
+    expect(inferMimeType('doc.pdf')).toBe('application/pdf')
+    expect(inferMimeType('archive.zip')).toBe('application/zip')
+    expect(inferMimeType('photo.png')).toBe('image/png')
+    expect(inferMimeType('custom.bin', 'application/custom')).toBe('application/custom')
+    expect(inferMimeType('unknown.xyz')).toBe('*/*')
   })
 })

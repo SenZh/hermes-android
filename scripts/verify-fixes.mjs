@@ -571,6 +571,37 @@ function testSavedStateReplacesDownloadEntry() {
   // 纯逻辑层必须真实导出认领函数，避免调用方自己拼 URI
   const manager = fs.readFileSync(path.resolve('src/lib/downloadManager.ts'), 'utf-8')
   assert.equal(manager.includes('export function pickCreatedEntry'), true, 'pickCreatedEntry must live in the pure logic module')
+
+  // 严禁 openFile 偷懒调用会导致 content:// 报错的 Sharing.shareAsync
+  const openFileFn = viewer.slice(viewer.indexOf('async function openFile()'))
+  const openFileBody = openFileFn.slice(0, openFileFn.indexOf('async function openFolder()'))
+  assert.equal(
+    openFileBody.includes('Sharing.shareAsync'),
+    false,
+    'openFile must NEVER call Sharing.shareAsync (it only supports file:// and crashes on content://)',
+  )
+  assert.ok(
+    openFileBody.includes('KeepAlive.openFile(downloadRecord.targetUri, resolvedMime)'),
+    'openFile must invoke native openFile with resolved MIME',
+  )
+
+  // 严禁 openFolder 无脑 Linking.openURL 广播给 Google 等无关 App
+  const openFolderFn = viewer.slice(viewer.indexOf('async function openFolder()'))
+  const openFolderBody = openFolderFn.slice(0, openFolderFn.indexOf('async function startDownloadAndExport'))
+  assert.ok(
+    openFolderBody.includes('KeepAlive.openFolder(dirUri)'),
+    'openFolder must invoke native openFolder for SAF tree URIs',
+  )
+
+  const nativeModule = fs.readFileSync(
+    path.resolve('modules/hermes-keepalive/android/src/main/java/expo/modules/hermeskeepalive/HermesKeepAliveModule.kt'),
+    'utf-8',
+  )
+  assert.ok(
+    nativeModule.includes('DocumentsContract.Document.MIME_TYPE_DIR'),
+    'native openFolder must set MIME_TYPE_DIR so only file managers respond',
+  )
+
   console.log(' -> PASSED: Saved state replaces the download entry across every file type.\n')
 }
 
