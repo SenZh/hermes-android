@@ -118,9 +118,6 @@ export default function DocumentViewerScreen() {
     }
   }
 
-  // 真正的文件落盘保存（保存到外部公共存储 Downloads 目录）
-  const SAVED_SAF_DIR_KEY = 'hermes_download_saf_dir_uri'
-
   async function download() {
     if (!normalized || isSystemRestricted) return
     try {
@@ -129,39 +126,17 @@ export default function DocumentViewerScreen() {
       // 1. 获取或流式下载本地缓存（如果已经下载过，零网络请求秒级读取）
       const localFile = await getOrDownloadLocalFile(t('Downloading {name}…', { name: fileName }))
 
-      // 2. 检查是否有已保存授权的外部 SAF 目录
-      let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
-      let targetFileUri: string | null = null
-      const fileMime = mime || 'application/octet-stream'
-
-      if (targetDirUri) {
-        try {
-          targetFileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
-        } catch {
-          targetDirUri = null
-          await AsyncStorage.removeItem(SAVED_SAF_DIR_KEY)
-        }
+      // 2. 利用系统级的保存与分享面板（系统原生支持直接选择“保存到文件” / “保存到下载” / “保存到微信”）
+      // 绝对不调用任何 base64() 或读入 JS 内存，彻底杜绝 OOM 内存溢出
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(localFile.uri, {
+          mimeType: mime || undefined,
+          dialogTitle: t('Save or share {name}', { name: fileName }),
+        })
+        toast(t('Saved to device: {name}', { name: fileName }), 'success')
+      } else {
+        toast(t('Sharing is not available on this device.'), 'warn')
       }
-
-      // 3. 若无有效目录，唤起系统目录授权选择器（用户可选择系统 Downloads 文件夹）
-      if (!targetFileUri) {
-        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync()
-        if (!permissions.granted) {
-          return
-        }
-        targetDirUri = permissions.directoryUri
-        await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
-        targetFileUri = await FileSystem.StorageAccessFramework.createFileAsync(targetDirUri, fileName, fileMime)
-      }
-
-      // 4. 将本地已下载的缓存文件直接写入外部目标 URI
-      // 使用 Base64 分块流式或者 writeAsStringAsync 保证真实落盘到系统公共存储
-      const b64Data = await localFile.base64()
-      await FileSystem.writeAsStringAsync(targetFileUri, b64Data, {
-        encoding: FileSystem.EncodingType.Base64,
-      })
-
-      toast(t('Saved to device: {name}', { name: fileName }), 'success')
     } catch (e) {
       toastError(e)
     }
