@@ -73,7 +73,7 @@
     "prebuild": "expo prebuild --platform android --clean",
     "build:apk": "bash scripts/build-apk.sh",
     "lint": "expo lint",
-    "test": "vitest run"
+    "test": "vitest run && node scripts/verify-fixes.mjs"
   },
   "private": true
 }
