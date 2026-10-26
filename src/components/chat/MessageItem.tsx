@@ -524,15 +524,11 @@ function MessageBody({ message, streaming, onEdit, onReact, onRetry }: Props) {
             </Text>
           ) : null}
           <View style={styles.metaRight}>
-            <Text variant="caption" tone="faint">
+            <Text variant="caption" tone="faint" numberOfLines={1}>
               {hhmm(message.at)}
+              {message.elapsedMs && formatDuration(message.elapsedMs) ? ` · ${formatDuration(message.elapsedMs)}` : ''}
+              {message.tps ? ` · ${message.tps}t/s` : ''}
             </Text>
-            {message.elapsedMs && formatDuration(message.elapsedMs) ? (
-              <Text variant="caption" tone="faint">
-                {t('Worked for {time}', { time: formatDuration(message.elapsedMs)! })}
-                {message.tps ? ` · ${message.tps} tok/s` : ''}
-              </Text>
-            ) : null}
           </View>
         </View>
       ) : null}
@@ -575,12 +571,12 @@ const styles = StyleSheet.create({
   reasonHead: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
   dots: { flexDirection: 'row', gap: 5, paddingVertical: space.sm },
   dot: { width: 7, height: 7, borderRadius: 4 },
-  actions: { flexDirection: 'row', gap: 2, alignItems: 'center' },
-  action: { width: 30, height: 28, alignItems: 'center', justifyContent: 'center' },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actions: { flexDirection: 'row', gap: 1, alignItems: 'center' },
+  action: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   userMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2, paddingTop: 2 },
-  userAction: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  metaRight: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  userAction: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  metaRight: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', flexShrink: 1, paddingLeft: 4 },
   attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   fileChip: {
     flexDirection: 'row',
