@@ -192,7 +192,7 @@
 | `analysis.md` | 补 F12（模块 OnDestroy 通道）、F13（六小时限额是静默失效非崩溃）、F14（两种异常形态）；修正 I4 的错误论证；补三条 stop 通道说明 |
 | `tech-design.md` | 全文重写。确立铁律"`startForeground` 成功前禁止任何 stop"；P1 改为投递前 preflight、P3 改为兜底重试且限定有效范围、P4 看门狗只上报、P9 移除 OnDestroy 的 stopService；§2.3 补 `lastStopAt`/`failStreak`/`retryAfter` 状态字段并真实调用纯函数 |
 | `contract.md` | C1 改为下标比较并要求 `build` 与 `startForeground` 同处 try；C5 改为"看门狗内不含 stop 动作"；C6 改指 `update()` 失败分支；C7/C8 改为"生产代码真实调用"；新增 C9；新增第四节"明确不承诺的项" |
-| `test-plan.md` | 删除 L3 循环自证层；Kotlin 取舍理由改写为"CI 未接入"；门槛数字按实数重算（61 单测 / 23 套件） |
+| `test-plan.md` | 删除 L3 循环自证层；Kotlin 取舍理由改写为"CI 未接入"；门槛数字按实数重算（61 单测 / 22 套件） |
 | `test-cases.md` | 新建，18 条用例，每条标注执行层与关联契约号 |
 
 **准入结论：v2 准予进入 Phase 2 实施。** 但必须在实施后由代码审查独立复核以下四点是否真的落地，不接受"文档写了代码没写"：

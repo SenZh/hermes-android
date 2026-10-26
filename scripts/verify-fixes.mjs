@@ -413,32 +413,6 @@ function testLargeFilePreviewGuard() {
 }
 
 // 17. 测试会话批量删除 (Bulk Delete) 契约与防 not_found 机制
-function testBulkDeleteSessionContract() {
-  console.log('[Test 17] Testing Bulk-Delete Transaction Contract (Anti-NotFound)...')
-
-  function formatBulkDeletePayload(targets) {
-    if (!targets || !targets.length) return null
-    return {
-      ids: targets.map((r) => r.id),
-    }
-  }
-
-  // 单会话删除契约
-  const single = [{ id: '20261026_single_sess' }]
-  const payloadSingle = formatBulkDeletePayload(single)
-  assert.deepEqual(payloadSingle, { ids: ['20261026_single_sess'] })
-
-  // 多会话删除契约
-  const multi = [{ id: 's1' }, { id: 's2' }, { id: 's3' }]
-  const payloadMulti = formatBulkDeletePayload(multi)
-  assert.equal(payloadMulti.ids.length, 3)
-  assert.deepEqual(payloadMulti.ids, ['s1', 's2', 's3'])
-
-  // 空检查
-  assert.equal(formatBulkDeletePayload([]), null)
-
-  console.log(' -> PASSED: Bulk-delete transaction contract verified — eliminates single DELETE 404/not_found.\n')
-}
 
 // 18. 测试相册与相机独立权限校验协议
 function testMediaPermissionsSeparation() {
@@ -503,11 +477,32 @@ function testStreamDownloadArchitecture() {
 function testSessionDeleteRpcContract() {
   console.log('[Test 20] Testing Session Delete RPC Contract (Anti-Maintenance Lock)...')
 
-  // 断言：客户端必须调用 session.delete 并附带 profile，严禁调用导致排他锁冲突的 bulk-delete
-  const sessionDeleteParams = { session_id: 'stored-abc', profile: 'custom-profile' }
-  assert.ok(sessionDeleteParams.session_id, 'session_id is required')
-  assert.ok(sessionDeleteParams.profile !== undefined, 'profile parameter must be supplied')
-  console.log(' -> PASSED: Session delete contract strictly verified — prevents lock contention.\n')
+  // 读真实生产源码，而不是断言脚本里自己写的一个对象
+  const sources = [
+    fs.readFileSync(path.resolve('src/app/(tabs)/sessions.tsx'), 'utf-8'),
+    fs.readFileSync(path.resolve('src/components/chat/SessionMenu.tsx'), 'utf-8'),
+  ]
+  const joined = sources.join('\n')
+
+  assert.ok(
+    joined.includes("rpc().request('session.delete'"),
+    'deleting a session must go through the live gateway RPC',
+  )
+  assert.equal(
+    joined.includes('/api/sessions/bulk-delete'),
+    false,
+    'the offline bulk-delete endpoint takes an exclusive lock and must never be used while the gateway runs',
+  )
+  assert.ok(
+    /session\.delete',\s*\{\s*session_id:[^}]*profile/.test(joined),
+    'session.delete must carry session_id and profile',
+  )
+
+  // 契约里的 RPC 名必须真的存在于生成的协议表
+  const contract = fs.readFileSync(path.resolve('src/lib/gateway/contract.generated.ts'), 'utf-8')
+  assert.ok(contract.includes("'session.delete':"), 'session.delete must be declared in the gateway contract')
+
+  console.log(' -> PASSED: Session delete contract verified against the real sources.\n')
 }
 
 // 21. 测试系统原生落盘管道与目录提示架构（防 Destination IOException 与偷懒调分享）
@@ -699,6 +694,12 @@ function testKeepAliveForegroundOrdering() {
   // 12. 冷却/退避决策必须走共享纯函数（行为由 vitest 覆盖，这里只防"接线被摘掉"）
   assert.ok(turns.includes('decideStart({'), 'the start decision must come from keepAlivePolicy')
 
+  // 13. 回前台必须强制探活，否则服务静默死亡后 JS 永远以为它在跑
+  assert.ok(
+    /addEventListener\('change',[\s\S]{0,200}?shown = ''/.test(turns),
+    'returning to the foreground must invalidate the cached label so liveness is re-checked',
+  )
+
   console.log(' -> PASSED: Foreground promotion ordering and preflight wiring verified.\n')
 }
 
@@ -720,14 +721,13 @@ function runAll() {
   testTpsDualStrategy()
   testUpdaterVersionCompare()
   testLargeFilePreviewGuard()
-  testBulkDeleteSessionContract()
   testMediaPermissionsSeparation()
   testStreamDownloadArchitecture()
   testSessionDeleteRpcContract()
   testNativeDiskDownloadArchitecture()
   testSavedStateReplacesDownloadEntry()
   testKeepAliveForegroundOrdering()
-  console.log('=== ALL 23 SUITES PASSED (0 ERRORS) ===')
+  console.log('=== ALL 22 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

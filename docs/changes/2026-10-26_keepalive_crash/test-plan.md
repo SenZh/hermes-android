@@ -34,7 +34,7 @@ v1 的理由（"没有测试源集所以不做"）不成立 —— 加两行 `te
 | `npx tsc --noEmit` | 0 错误 |
 | `node scripts/check-i18n.mjs` | 通过 |
 | `npm test` 单元测试 | ≥ **71** 项（49 基线 + 19 项 keepAlivePolicy + 4 项下载新增 − 1 项已删除） |
-| `npm test` verify-fixes | ≥ **23** 项（22 基线 + 1 项 KeepAlive 结构断言套件） |
+| `npm test` verify-fixes | ≥ **22** 项（21 基线 + 1 项 KeepAlive 结构断言套件） |
 | L3 真机项 | 交付说明中如实标注"待用户验证"，不得写成已通过 |
 
 ## 四、回归关注点

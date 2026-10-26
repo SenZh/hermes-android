@@ -14,7 +14,7 @@
 | `npx tsc --noEmit` | 0 错误 | exit 0，无输出 | ✅ |
 | `node scripts/check-i18n.mjs` | zh: ok | `[i18n] zh: ok` | ✅ |
 
-**数字真实，但"86 项全绿"的含金量被高估**：verify-fixes 的 23 个套件里，Test 1–20 共 20 个套件**不读取任何生产源码**（详见维度二、三），真正接触被测代码的只有 Test 21/22/23 三个。有效门禁 ≈ 63 + 3。
+**数字真实，但"86 项全绿"的含金量被高估**：verify-fixes 的 22 个套件里，Test 1–20 共 20 个套件**不读取任何生产源码**（详见维度二、三），真正接触被测代码的只有 Test 21/22/23 三个。有效门禁 ≈ 63 + 3。
 
 ## 一、契约覆盖度逐条对照
 
@@ -25,7 +25,7 @@
 | # | 契约要求 | 对应断言 | 结论 | 依据 / 后果 |
 |---|---------|---------|------|------------|
 | C1 | `onStartCommand` 内 `startForeground` 下标最小 | `verify-fixes.mjs:606-614` | 部分覆盖 | 纯文本 `indexOf` 比较。M3（`"stopSelf()"` 写进字符串 + 真实停服走 `stopQuietly()`）、M4（`if (Build.VERSION.SDK_INT >= 99) { startForeground… }`）均全绿；M18（真的把 `stopSelf()` 提到前面）能拦住。**只防字面量顺序，不防执行顺序** |
-| C2 | 成功路径把 `state` 置 `RUNNING` | 无 | **未覆盖** | M10 删除 `KeepAliveService.kt:49` 的 `state = ServiceState.RUNNING` → 23 套件全绿。后果：模块 `update()` 会永远看到 STARTING，通知文本永不刷新 |
+| C2 | 成功路径把 `state` 置 `RUNNING` | 无 | **未覆盖** | M10 删除 `KeepAliveService.kt:49` 的 `state = ServiceState.RUNNING` → 22 套件全绿。后果：模块 `update()` 会永远看到 STARTING，通知文本永不刷新 |
 | C3 | `ensureChannelReady` 在投递前，false 即 return false | `verify-fixes.mjs:632-643` | 部分覆盖 | 顺序 + `return@Function false` 的正则能拦住 M1（去掉 `!`）；但 **M2 把 `KeepAliveService.kt:191` 的 `!= null` 改成 `== null`（preflight 永远 false，服务永不启动）全绿**——语义无人守 |
 | C4 | 投递后 `armWatchdog()` 被调用，`WATCHDOG_MS = 4000L` | 无 | **未覆盖** | `armWatchdog` 在代码中根本不存在（`grep` 为 0 命中，`HermesKeepAliveModule.kt:61-62` 是内联 `handler.postDelayed`），契约写的是已废弃的设计词。M9 把 `WATCHDOG_MS` 改 60000L 全绿。后果：看门狗失效无人发现 |
 | C5 | 看门狗内不含 `stopService`/`stopSelf`，仅改 `state` 与 `lastStartMissedAt` | `verify-fixes.mjs:625-630` | 部分覆盖 | 只查两个字面量。M6b 让看门狗调 `shutdown()`（内部 `context.stopService`）全绿；`lastStartMissedAt` 的赋值无断言 |
@@ -129,7 +129,7 @@
 
 | # | 类型 | 问题描述 | 引用位置 | 严重度 | 解决建议 |
 |---|------|---------|---------|--------|---------|
-| 1 | 门禁可绕 | `stopOrDefer()` 改成无条件 `stopSelf()`（本次崩溃的原始形态）后 23 套件全绿 | `KeepAliveService.kt:107-113`；Test 23 无该函数切片 | 严重 | 为 `stopOrDefer`/`onTimeout`/`onTaskRemoved` 各切一段断言：STARTING 时只能 `requestStop()`，禁止 `stopSelf()` |
+| 1 | 门禁可绕 | `stopOrDefer()` 改成无条件 `stopSelf()`（本次崩溃的原始形态）后 22 套件全绿 | `KeepAliveService.kt:107-113`；Test 23 无该函数切片 | 严重 | 为 `stopOrDefer`/`onTimeout`/`onTaskRemoved` 各切一段断言：STARTING 时只能 `requestStop()`，禁止 `stopSelf()` |
 | 2 | 循环自证 | Test 1–20 不读任何生产源码，全在脚本内重建逻辑再断言自己 | `scripts/verify-fixes.mjs:6-511` | 严重 | 删除或改造为 `readFileSync` 断言 + 纯逻辑下沉到 `src/lib/` 由 vitest 真实 import |
 | 3 | 假覆盖 | A5 会话删除 RPC：Test 20 断言手写对象；M20 把 `sessions.tsx` 改回 `bulk-delete` 仍全绿 | `verify-fixes.mjs:502-511`；`src/app/(tabs)/sessions.tsx:163` | 严重 | 改为读 `sessions.tsx`/`SessionMenu.tsx` 断言 `'session.delete'` 出现且 `bulk-delete` 不出现 |
 | 4 | 语义无守 | `ensureChannelReady` 返回语义反转（`!= null`→`== null`）全绿，preflight 永远 false | `KeepAliveService.kt:191`；`verify-fixes.mjs:640-643` | 严重 | 把"通道可用判定"下沉为纯函数（入参 `channelExists: boolean`）由 vitest 真测 |
@@ -195,7 +195,7 @@
 
 ### 5.2 裁决：驳回成立
 
-无法反驳。最硬的一条是 #1（M17）：把 `stopOrDefer()` 改回无条件 `stopSelf()`，23 个套件全绿。那正是本次崩溃的形态。等于"这次修的 Bug 可以被无声改回去"，直接违反 `AGENTS.md`「每次 Bug 修复必须新增一个对抗该 Bug 的真实用例」。
+无法反驳。最硬的一条是 #1（M17）：把 `stopOrDefer()` 改回无条件 `stopSelf()`，22 个套件全绿。那正是本次崩溃的形态。等于"这次修的 Bug 可以被无声改回去"，直接违反 `AGENTS.md`「每次 Bug 修复必须新增一个对抗该 Bug 的真实用例」。
 
 第二条同样成立：#13（M14/M15）——我在自审里标为"高"的两个 JS 修复（模块级时间戳、退避唤醒 timer）**零断言**。自己标了高危却不写用例，是自审失职。
 

@@ -159,7 +159,14 @@ function useKeepAlive() {
     }
     const offChat = useChat.subscribe(sync)
     const offSettings = useSettings.subscribe(sync)
-    const offApp = AppState.addEventListener('change', (state) => state === 'active' && sync())
+    // Returning to the foreground is the one moment we can cheaply re-check whether the service
+    // survived. Without resetting `shown`, a service that died while we were away (timeout cap,
+    // task swipe) would look alive forever and keep-alive would silently do nothing.
+    const offApp = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return
+      shown = ''
+      sync()
+    })
     sync()
     return () => {
       offChat()

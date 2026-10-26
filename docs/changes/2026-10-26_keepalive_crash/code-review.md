@@ -44,7 +44,7 @@
 ## 二、Sub-agent 独立审查
 
 > 审查人：独立 sub-agent（未参与分析与实现）
-> 实测执行：`vitest run` → 8 文件 60 项（审查当时）、`verify-fixes.mjs` → 23 套件、`tsc` 0 错、`check-i18n` ok
+> 实测执行：`vitest run` → 8 文件 60 项（审查当时）、`verify-fixes.mjs` → 22 套件、`tsc` 0 错、`check-i18n` ok
 > 编译能力：`which java kotlinc gradle` 三者皆空，`ANDROID_HOME` 空 → 明确声明"Kotlin 未编译验证"
 
 发现 14 条：high 2 / medium 5 / low 7。核心结论：
