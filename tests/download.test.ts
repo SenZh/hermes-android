@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   calculateDownloadSpeed,
   getDownloadStorageKey,
+  pickCreatedEntry,
   resolveFileNameConflict,
   safeParseDownloadRecord,
 } from '@/lib/downloadManager'
@@ -53,6 +54,56 @@ describe('DownloadManager: getDownloadStorageKey', () => {
     expect(getDownloadStorageKey('/opt/data/workspace/output/test.apk')).toBe(
       'hermes_dl_opt_data_workspace_output_test_apk',
     )
+  })
+})
+
+describe('DownloadManager: pickCreatedEntry', () => {
+  const entry = (name: string, uri: string) => ({ name, uri })
+
+  it('[TC-DL-13] 普通落盘：认领新增的同名条目', () => {
+    const picked = pickCreatedEntry(
+      ['old.txt'],
+      [entry('old.txt', 'content://d/old'), entry('app.apk', 'content://d/app')],
+      'app.apk',
+    )
+    expect(picked?.uri).toBe('content://d/app')
+  })
+
+  it('[TC-DL-14] 覆盖写回：名字原本就存在时仍认领该名字', () => {
+    const picked = pickCreatedEntry(
+      ['app.apk'],
+      [entry('app.apk', 'content://d/app-v2')],
+      'app.apk',
+    )
+    expect(picked?.uri).toBe('content://d/app-v2')
+  })
+
+  it('[TC-DL-15] SAF 自动改名：名字不匹配时认领唯一新增条目', () => {
+    // Android DocumentFile.createFile 遇重名会自动生成 "app (1).apk"
+    const picked = pickCreatedEntry(
+      ['app.apk'],
+      [entry('app.apk', 'content://d/app'), entry('app (1).apk', 'content://d/app-1')],
+      'app.apk',
+    )
+    expect(picked?.name).toBe('app (1).apk')
+    expect(picked?.uri).toBe('content://d/app-1')
+  })
+
+  it('[TC-DL-16] 空目录：只有一个条目时直接认领', () => {
+    const picked = pickCreatedEntry([], [entry('app.apk', 'content://d/app')], 'other.apk')
+    expect(picked?.uri).toBe('content://d/app')
+  })
+
+  it('[TC-DL-17] 无法判定：新增多个条目且名字对不上时返回 null', () => {
+    expect(
+      pickCreatedEntry(['a'], [entry('a', 'content://d/a'), entry('b', 'content://d/b'), entry('c', 'content://d/c')], 'd'),
+    ).toBeNull()
+    expect(pickCreatedEntry(['a'], [entry('a', 'content://d/a')], 'b')).toBeNull()
+  })
+
+  it('[TC-DL-18] 空名字条目被忽略，不参与认领', () => {
+    const picked = pickCreatedEntry([], [{ name: null, uri: 'content://d/x' }, entry('k.txt', 'content://d/k')], 'k.txt')
+    expect(picked?.uri).toBe('content://d/k')
   })
 })
 

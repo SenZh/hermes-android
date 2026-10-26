@@ -522,17 +522,56 @@ function testNativeDiskDownloadArchitecture() {
     'localFile.base64() is strictly forbidden in viewer.tsx to prevent OOM',
   )
 
-  // 2. 真实断言：验证 downloadManager 模块导出与功能正确性
-  const downloadPipeline = {
-    cacheScheme: 'file://',
-    useNativeFileChannelCopy: true,
-    neverCallBase64: true,
-    reportTargetFolder: true,
-  }
-  assert.equal(downloadPipeline.neverCallBase64, true, 'base64() is strictly forbidden to prevent OOM')
-  assert.equal(downloadPipeline.useNativeFileChannelCopy, true, 'File.copy into SAF Directory must be stream-based')
-  assert.equal(downloadPipeline.reportTargetFolder, true, 'Must display target folder to user')
+  // 2. 真实静态源码断言：落盘链路必须走 overwrite 选项，且必须回到目录认领真实 URI
+  const viewer = fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8')
+  assert.equal(
+    viewer.includes('copy(finalDestFile, { overwrite: shouldOverwrite })'),
+    true,
+    'copy() must pass overwrite so SAF deletes the old document instead of throwing DestinationAlreadyExists',
+  )
+  assert.equal(
+    viewer.includes('conflictFile'),
+    false,
+    'Hand-rolled pseudo-URI delete is a no-op on SAF and must not come back',
+  )
+  assert.equal(
+    viewer.includes('pickCreatedEntry'),
+    true,
+    'Recorded targetUri must come from the real SAF entry, not a synthesized child URI',
+  )
+  assert.equal(
+    viewer.includes('Directory.pickDirectoryAsync(lastDirUri'),
+    true,
+    'Every download must open the directory picker, defaulting to the last used folder',
+  )
   console.log(' -> PASSED: Native disk download and SAF directory pipeline verified.\n')
+}
+
+function testSavedStateReplacesDownloadEntry() {
+  console.log('[Test 22] Testing Downloaded State Replaces Download Entry...')
+  const viewer = fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8')
+
+  // 已下载完成态必须以 downloadRecord 为准，且不能反过来把按钮退回"下载"
+  assert.equal(
+    viewer.includes('const degraded: StoredDownloadRecord = { ...record, targetUri: \'\' }'),
+    true,
+    'A failed exists() probe must degrade the record, never silently drop it back to the Download button',
+  )
+  assert.equal(
+    viewer.includes('downloadRecord && downloadRecord.targetUri ?'),
+    true,
+    'headerRight must switch to Open once a saved record exists',
+  )
+  assert.equal(
+    viewer.includes("shouldAutoLoad && downloadRecord ?"),
+    true,
+    'Text/Markdown/image files must also show the saved bar with Open actions',
+  )
+
+  // 纯逻辑层必须真实导出认领函数，避免调用方自己拼 URI
+  const manager = fs.readFileSync(path.resolve('src/lib/downloadManager.ts'), 'utf-8')
+  assert.equal(manager.includes('export function pickCreatedEntry'), true, 'pickCreatedEntry must live in the pure logic module')
+  console.log(' -> PASSED: Saved state replaces the download entry across every file type.\n')
 }
 
 function runAll() {
@@ -558,7 +597,8 @@ function runAll() {
   testStreamDownloadArchitecture()
   testSessionDeleteRpcContract()
   testNativeDiskDownloadArchitecture()
-  console.log('=== ALL 21 SUITES PASSED (0 ERRORS) ===')
+  testSavedStateReplacesDownloadEntry()
+  console.log('=== ALL 22 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

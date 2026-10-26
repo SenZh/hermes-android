@@ -18,6 +18,7 @@ import { useRest } from '@/lib/hooks'
 import {
   calculateDownloadSpeed,
   getDownloadStorageKey,
+  pickCreatedEntry,
   resolveFileNameConflict,
   safeParseDownloadRecord,
   type StoredDownloadRecord,
@@ -110,24 +111,31 @@ export default function DocumentViewerScreen() {
     }
   }, [])
 
-  // 检查是否已有落盘成功的持久化记录并核验物理文件依然存在
+  // 读取持久化下载记录。记录一旦写入就以它为准展示完成态，绝不因为一次
+  // 探测失败就把按钮退回"下载"；只有当真实探测到文件已不存在时，才降级成
+  // "仅知道目录"的记录（仍显示打开所在目录，并提示文件可能被移走）。
   useEffect(() => {
     if (!normalized) return
     const key = getDownloadStorageKey(normalized)
     AsyncStorage.getItem(key)
       .then((raw) => {
         const record = safeParseDownloadRecord(raw)
-        if (record && isMountedRef.current) {
-          // 契约校验：检查物理文件是否仍有效存在，防止用户在外部系统删了文件后 App 陷入假完成态
-          const fileCheck = new File(record.targetUri)
-          if (fileCheck.exists) {
-            setDownloadRecord(record)
-          } else {
-            // 文件已被外部删除，自动清除记录并恢复为未下载态
-            void AsyncStorage.removeItem(key)
-            setDownloadRecord(null)
+        if (!record || !isMountedRef.current) return
+        let alive = true
+        if (record.targetUri) {
+          try {
+            alive = new File(record.targetUri).exists
+          } catch {
+            alive = true
           }
         }
+        if (!alive) {
+          const degraded: StoredDownloadRecord = { ...record, targetUri: '' }
+          void AsyncStorage.setItem(key, JSON.stringify(degraded))
+          setDownloadRecord(degraded)
+          return
+        }
+        setDownloadRecord(record)
       })
       .catch(() => {})
   }, [normalized])
@@ -146,7 +154,11 @@ export default function DocumentViewerScreen() {
 
   // 打开已落盘的文件
   async function openFile() {
-    if (!downloadRecord?.targetUri) return
+    if (!downloadRecord) return
+    if (!downloadRecord.targetUri) {
+      toast(t('The saved file could not be located. Use “Open folder”.'), 'info')
+      return
+    }
     try {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(downloadRecord.targetUri, {
@@ -181,14 +193,13 @@ export default function DocumentViewerScreen() {
     if (Platform.OS === 'web') return toast(t('Downloading is available in the Android app.'), 'info')
 
     try {
-      // 1. 前置确定外部目录（若无则先选目录，用户取消直接中断，零流量消耗）
-      let targetDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
-      if (!targetDirUri) {
-        const picked = await Directory.pickDirectoryAsync()
-        if (!picked || !picked.uri) return
-        targetDirUri = picked.uri
-        await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
-      }
+      // 1. 前置选目录：每次都弹系统目录选择器，默认定位到上次用过的目录，用户可随时切换。
+      //    未确认目录前不发起任何网络请求，取消则零流量消耗。
+      const lastDirUri = await AsyncStorage.getItem(SAVED_SAF_DIR_KEY)
+      const picked = await Directory.pickDirectoryAsync(lastDirUri ?? undefined)
+      if (!picked || !picked.uri) return
+      const targetDirUri = picked.uri
+      if (targetDirUri !== lastDirUri) await AsyncStorage.setItem(SAVED_SAF_DIR_KEY, targetDirUri)
 
       const targetDir = new Directory(targetDirUri)
 
@@ -202,14 +213,15 @@ export default function DocumentViewerScreen() {
         }
       } catch {}
 
-      // 2. 检查目标目录下是否存在同名冲突
+      // 2. 检查目标目录下是否存在同名冲突（顺手记下现有文件名，落盘后用来认领真实条目）
       let finalTargetName = fileName
       let shouldOverwrite = false
+      let beforeNames: string[] = []
       try {
         const entries = targetDir.list()
-        const existingNames = entries.map((e) => e.name).filter(Boolean) as string[]
+        beforeNames = entries.map((e) => e.name).filter(Boolean) as string[]
 
-        if (existingNames.includes(fileName)) {
+        if (beforeNames.includes(fileName)) {
           // 呼出冲突决策弹窗
           const choice = await new Promise<'overwrite' | 'rename' | 'cancel'>((resolve) => {
             Alert.alert(
@@ -239,7 +251,7 @@ export default function DocumentViewerScreen() {
           if (choice === 'overwrite') {
             shouldOverwrite = true
           } else {
-            finalTargetName = resolveFileNameConflict(fileName, existingNames, 'rename')
+            finalTargetName = resolveFileNameConflict(fileName, beforeNames, 'rename')
           }
         }
       } catch {
@@ -303,29 +315,36 @@ export default function DocumentViewerScreen() {
       }
 
       // 4. 落盘至外部目标目录
-      // 若选择覆盖，必须先删除外部原同名文件以防止 Android 原生 DocumentFile 自动创建 (1) 副本
-      if (shouldOverwrite) {
-        try {
-          const conflictFile = new File(targetDir, fileName)
-          if (conflictFile.exists) conflictFile.delete()
-        } catch {}
-      }
-
-      // 通过底层 FileChannel 零内存流式拷贝
+      // copy 的 overwrite 选项让底层 SAF 策略先 deleteRecursively 旧文档再写入，
+      // 既不依赖拼出来的伪子 URI，也不会被 DocumentFile 自动加 " (1)" 后缀。
       const finalDestFile = new File(targetDir, finalTargetName)
-      await downloadedLocalFile.copy(finalDestFile)
+      await downloadedLocalFile.copy(finalDestFile, { overwrite: shouldOverwrite })
 
       // 及时清理私有缓存中的临时下载副本，释放手机内部空间
       try {
         if (downloadedLocalFile.exists) downloadedLocalFile.delete()
       } catch {}
 
+      // 5. 认领真实落盘条目的 document URI
+      // `new File(dir, name).uri` 只是 Tree URI 拼路径的伪子 URI，写进记录后
+      // 重进页面 exists 恒为 false，完成态会丢失。必须回到目录里按新增条目取真实 URI。
+      let realUri = ''
+      let realName = finalTargetName
+      try {
+        const after = targetDir.list().map((e) => ({ name: e.name ?? null, uri: e.uri }))
+        const created = pickCreatedEntry(beforeNames, after, finalTargetName)
+        if (created && created.name) {
+          realUri = created.uri
+          realName = created.name
+        }
+      } catch {}
+
       const record: StoredDownloadRecord = {
-        targetUri: finalDestFile.uri,
-        fileName: finalTargetName,
+        targetUri: realUri,
+        fileName: realName,
         targetFolder: displayFolder,
         downloadedAt: Date.now(),
-        fileSize: downloadTotalBytes || downloadedLocalFile.size || 0,
+        fileSize: downloadTotalBytes || 0,
       }
 
       // 写入持久化存储
@@ -370,7 +389,7 @@ export default function DocumentViewerScreen() {
           headerRight: () =>
             !isSystemRestricted ? (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {downloadRecord ? (
+                {downloadRecord && downloadRecord.targetUri ? (
                   <IconButton icon={FolderOpen} label={t('Open folder')} onPress={openFolder} />
                 ) : (
                   <IconButton
@@ -403,6 +422,73 @@ export default function DocumentViewerScreen() {
               'This path is outside the safe file root (/opt/data). For security reasons, the server only allows viewing and downloading files within the workspace.',
             )}
           </Text>
+        </View>
+      ) : null}
+
+      {/* 已保存态通条：文本 / Markdown / 图片这类可直接预览的文件，下载完成后同样
+          给出【打开文件】与【打开所在目录】，不再保留任何"下载"入口。 */}
+      {shouldAutoLoad && downloadRecord ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space.xs,
+            marginVertical: space.sm,
+            paddingVertical: space.xs,
+            paddingHorizontal: space.sm,
+            borderRadius: radius.md,
+            backgroundColor: c.surfaceAlt,
+          }}
+        >
+          <CheckCircle2 size={16} color={c.accentText} />
+          <Text variant="caption" tone="accent" numberOfLines={1} style={{ flex: 1 }}>
+            {t('Saved to {folder}: {name}', {
+              folder: downloadRecord.targetFolder,
+              name: downloadRecord.fileName,
+            })}
+            {downloadRecord.targetUri ? '' : ` · ${t('file may have been moved')}`}
+          </Text>
+          <IconButton icon={FileText} label={t('Open file')} onPress={openFile} />
+          <IconButton icon={FolderOpen} label={t('Open folder')} onPress={openFolder} />
+          {downloadRecord.targetUri ? null : (
+            <IconButton
+              icon={Download}
+              label={t('Download')}
+              disabled={isDownloading}
+              onPress={() => startDownloadAndExport(false)}
+            />
+          )}
+        </View>
+      ) : null}
+
+      {shouldAutoLoad && !downloadRecord && isDownloading ? (
+        <View style={{ width: '100%', gap: space.xs, marginVertical: space.sm }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+            <Text variant="caption" weight="semibold">
+              {progressPercent}% · {downloadSpeed || '0 KB/s'}
+            </Text>
+            <Text variant="caption" tone="faint">
+              {bytes(downloadBytesWritten)} / {bytes(downloadTotalBytes)}
+            </Text>
+          </View>
+          <View
+            style={{
+              width: '100%',
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: c.surfaceAlt,
+              overflow: 'hidden',
+            }}
+          >
+            <View
+              style={{
+                width: `${progressPercent}%`,
+                height: '100%',
+                backgroundColor: c.accent,
+                borderRadius: 3,
+              }}
+            />
+          </View>
         </View>
       ) : null}
 

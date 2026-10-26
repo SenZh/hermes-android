@@ -90,6 +90,47 @@ export function getDownloadStorageKey(path: string): string {
   return `hermes_dl_${sanitized}`
 }
 
+export interface SafEntryLike {
+  name: string | null
+  uri: string
+}
+
+/**
+ * 纯函数：在 copy 完成后定位真实落盘的 SAF 子条目。
+ *
+ * SAF 目录下 `new File(dir, name)` 拼出的是**伪子 URI**（Tree URI + 路径段），
+ * 真实文件是 `content://.../document/<docId>` 形式，两者对不上。所以落盘后
+ * 必须回到目录 list() 里按"新增条目"认领真实 URI，否则持久化记录指向一个
+ * 不存在的 URI，重进页面 exists 恒为 false，下载完成态会永远丢失。
+ *
+ * 三种情形依次兜底：
+ * 1. 名字匹配且是新增条目（普通落盘）
+ * 2. 名字匹配但原本就存在（overwrite 覆盖写回）
+ * 3. 名字不匹配但出现了新增条目（SAF 自己加了 " (1)" 之类后缀）
+ */
+export function pickCreatedEntry(
+  beforeNames: readonly string[],
+  after: readonly SafEntryLike[],
+  wantedName: string,
+): SafEntryLike | null {
+  const before = new Set(beforeNames)
+  const named = (e: SafEntryLike) => e.name !== null && e.name === wantedName
+
+  // 1. 普通落盘：想要的这个名字是新出现的条目
+  const fresh = after.find((e) => named(e) && !before.has(e.name as string))
+  if (fresh) return fresh
+
+  // 2. 只多出一个条目：不管它叫什么，就是它（SAF 自动加 " (1)" 后缀的情形）
+  const added = after.filter((e) => e.name !== null && !before.has(e.name))
+  if (added.length === 1) return added[0]
+
+  // 3. 没有新增条目但名字对得上：覆盖写回复用了同一个文档
+  if (added.length === 0) return after.find(named) ?? null
+
+  // 4. 多出多个条目且名字对不上：无法判定，交给调用方兜底
+  return null
+}
+
 /**
  * 纯函数：安全解析持久化下载记录（防御脏数据）
  */
