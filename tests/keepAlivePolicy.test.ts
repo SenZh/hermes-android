@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 // 真实 import 生产代码模块，严禁在测试里重写一份逻辑自证
-import { STOP_COOLDOWN_MS, canStartNow, nextBackoffMs } from '@/lib/keepAlivePolicy'
+import { STOP_COOLDOWN_MS, canStartNow, decideStart, nextBackoffMs } from '@/lib/keepAlivePolicy'
 
 describe('KeepAlivePolicy: canStartNow', () => {
   it('[TC-KA-07] 停服后不足冷却期时拒绝投递', () => {
@@ -68,5 +68,59 @@ describe('KeepAlivePolicy: nextBackoffMs', () => {
   it('[TC-KA-21] 非有限数入参安全返回 0', () => {
     expect(nextBackoffMs(Number.NaN)).toBe(0)
     expect(nextBackoffMs(Number.POSITIVE_INFINITY)).toBe(0)
+  })
+})
+
+describe('KeepAlivePolicy: decideStart', () => {
+  const base = { running: false, foreground: true, now: 10_000, lastStopAt: 0, retryAfter: 0 }
+
+  it('[TC-KA-22] 前后台正常且无阻挡时允许投递', () => {
+    expect(decideStart(base)).toEqual({ action: 'start' })
+  })
+
+  it('[TC-KA-23] 已在运行时不再投递', () => {
+    expect(decideStart({ ...base, running: true })).toEqual({ action: 'skip', reason: 'running' })
+  })
+
+  it('[TC-KA-24] 应用在后台时绝不投递（后台启动前台服务会被系统拒绝并记账）', () => {
+    expect(decideStart({ ...base, foreground: false })).toEqual({ action: 'skip', reason: 'background' })
+    // 后台优先级高于其它门：即使冷却也已过期，仍然不能投递
+    expect(decideStart({ ...base, foreground: false, lastStopAt: 0, retryAfter: 0 })).toEqual({
+      action: 'skip',
+      reason: 'background',
+    })
+  })
+
+  it('[TC-KA-25] 停服冷却期内必须等待，且等够剩余时长', () => {
+    // lastStopAt=9900, now=10000 → 只过了 100ms，差 200ms
+    expect(decideStart({ ...base, lastStopAt: 9900 })).toEqual({ action: 'wait', delayMs: 200 })
+  })
+
+  it('[TC-KA-26] 退避期内必须等待，且等够剩余时长', () => {
+    expect(decideStart({ ...base, retryAfter: 12_500 })).toEqual({ action: 'wait', delayMs: 2500 })
+  })
+
+  it('[TC-KA-27] 冷却与退避同时生效时，取先到期的那个不能绕过冷却', () => {
+    // 冷却剩 200ms，退避剩 2500ms → 先要满足冷却
+    const d = decideStart({ ...base, lastStopAt: 9900, retryAfter: 12_500 })
+    expect(d).toEqual({ action: 'wait', delayMs: 200 })
+  })
+
+  it('[TC-KA-28] 冷却门不可被反转：冷却刚过边界才放行', () => {
+    // 恰好等于冷却时长 → 放行
+    expect(decideStart({ ...base, now: 10_300, lastStopAt: 10_000 })).toEqual({ action: 'start' })
+    // 差 1ms → 等待
+    expect(decideStart({ ...base, now: 10_299, lastStopAt: 10_000 })).toEqual({
+      action: 'wait',
+      delayMs: 1,
+    })
+  })
+
+  it('[TC-KA-29] 自定义冷却时长参与判定', () => {
+    expect(decideStart({ ...base, lastStopAt: 9500, cooldownMs: 1000 })).toEqual({
+      action: 'wait',
+      delayMs: 500,
+    })
+    expect(decideStart({ ...base, lastStopAt: 9000, cooldownMs: 1000 })).toEqual({ action: 'start' })
   })
 })

@@ -12,8 +12,19 @@ android {
     versionCode 1
     versionName '1.0.0'
   }
+  testOptions {
+    unitTests {
+      includeAndroidResources = true
+    }
+  }
 }
 
 dependencies {
   implementation "androidx.core:core-ktx:1.17.0"
+
+  // Behaviour tests for the foreground-service state machine. These run on the JVM, so the
+  // "must promote before stopping" rule is checked by execution rather than by grepping source.
+  testImplementation "junit:junit:4.13.2"
+  testImplementation "org.robolectric:robolectric:4.14.1"
+  testImplementation "androidx.test:core:1.6.1"
 }

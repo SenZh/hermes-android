@@ -602,6 +602,7 @@ function testKeepAliveForegroundOrdering() {
     ),
   )
   const turns = stripComments(fs.readFileSync(path.resolve('src/components/chat/TurnEffects.tsx'), 'utf-8'))
+  const viewerSrc = stripComments(fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8'))
 
   // 1. onStartCommand 方法体：startForeground 必须最先出现
   const onStart = service.slice(service.indexOf('override fun onStartCommand'))
@@ -647,13 +648,12 @@ function testKeepAliveForegroundOrdering() {
   const onDestroyBody = onDestroy.slice(0, onDestroy.indexOf('private companion object'))
   assert.equal(onDestroyBody.includes('stopService'), false, 'OnDestroy must not stopService')
 
-  // 6. JS：冷却与退避必须真实接在 start 之前
+  // 6. JS：冷却与退避必须经共享决策函数，且决策在 start 之前
   const atStart = turns.indexOf('KeepAlive.start(')
   assert.ok(atStart !== -1, 'TurnEffects must call KeepAlive.start')
-  const atCooldown = turns.indexOf('canStartNow(now')
-  const atRetryGate = turns.indexOf('now < retryAfter')
-  assert.ok(atCooldown !== -1 && atCooldown < atStart, 'cooldown gate must be wired before KeepAlive.start')
-  assert.ok(atRetryGate !== -1 && atRetryGate < atStart, 'backoff gate must be wired before KeepAlive.start')
+  const atDecision = turns.indexOf('decideStart({')
+  assert.ok(atDecision !== -1 && atDecision < atStart, 'the start decision must be made before KeepAlive.start')
+  assert.ok(turns.includes('decision.action === \'wait\''), 'a waiting decision must be handled, not dropped')
   assert.ok(turns.includes('nextBackoffMs(failStreak)'), 'backoff must be computed with the shared policy')
 
   // 7. JS：服务已死的分支必须先 stop 再复位，避免裂脑重复投递
@@ -677,10 +677,27 @@ function testKeepAliveForegroundOrdering() {
     'the service must honour a deferred stop after promotion',
   )
 
-  // 9. 通知常量不得漂移
+  // 9. 通知常量与看门狗窗口不得漂移
   assert.ok(service.includes('NOTIFICATION_ID = 9119'), 'notification id must stay 9119')
   assert.ok(service.includes('CHANNEL_ID = "hermes-working"'), 'channel id must stay hermes-working')
   assert.ok(service.includes('IMPORTANCE_LOW'), 'channel importance must stay LOW')
+  assert.ok(service.includes('state = ServiceState.RUNNING'), 'a successful promotion must set RUNNING')
+  assert.ok(module.includes('WATCHDOG_MS = 4000L'), 'the watchdog window must stay below the system deadline')
+
+  // 10. preflight 的返回值语义不能被反转：渠道存在才允许投递
+  assert.ok(
+    /return manager\.getNotificationChannel\(CHANNEL_ID\) != null/.test(service),
+    'ensureChannelReady must return true only when the channel actually exists',
+  )
+
+  // 11. 真实 URI 认领必须接在落盘之后（否则记录里又是伪 URI，重进丢状态）
+  assert.ok(
+    /pickCreatedEntry\(beforeNames,\s*after,\s*finalTargetName\)/.test(viewerSrc),
+    'the saved record must claim the real SAF entry returned by list()',
+  )
+
+  // 12. 冷却/退避决策必须走共享纯函数（行为由 vitest 覆盖，这里只防"接线被摘掉"）
+  assert.ok(turns.includes('decideStart({'), 'the start decision must come from keepAlivePolicy')
 
   console.log(' -> PASSED: Foreground promotion ordering and preflight wiring verified.\n')
 }

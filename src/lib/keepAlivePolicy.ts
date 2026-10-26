@@ -43,3 +43,40 @@ export function nextBackoffMs(
   if (base <= 0 || cap <= 0) return 0
   return Math.min(base * 2 ** (failStreak - 1), cap)
 }
+
+export type StartDecision =
+  /** Post the start now. */
+  | { action: 'start' }
+  /** Do not post yet; wake up again after `delayMs` so the request is not dropped. */
+  | { action: 'wait'; delayMs: number }
+  /** Nothing to do: already running, or the app is in the background. */
+  | { action: 'skip'; reason: 'running' | 'background' }
+
+/**
+ * The whole "may I post a start right now?" decision, in one testable place.
+ *
+ * Keeping this out of the component is what makes it verifiable: the cooldown and backoff gates
+ * determine whether Android is ever handed a start it cannot satisfy, so they must not live in
+ * code that only a real device can exercise.
+ */
+export function decideStart(args: {
+  running: boolean
+  foreground: boolean
+  now: number
+  lastStopAt: number
+  retryAfter: number
+  cooldownMs?: number
+}): StartDecision {
+  const { running, foreground, now, lastStopAt, retryAfter } = args
+  if (running) return { action: 'skip', reason: 'running' }
+  if (!foreground) return { action: 'skip', reason: 'background' }
+
+  const cooldown = args.cooldownMs ?? STOP_COOLDOWN_MS
+  if (!canStartNow(now, lastStopAt, cooldown)) {
+    return { action: 'wait', delayMs: Math.max(0, lastStopAt + cooldown - now) }
+  }
+  if (now < retryAfter) {
+    return { action: 'wait', delayMs: retryAfter - now }
+  }
+  return { action: 'start' }
+}

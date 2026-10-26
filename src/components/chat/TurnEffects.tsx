@@ -9,7 +9,7 @@ import { syncCronBackgroundCheck } from '@/lib/backgroundTasks'
 import { textOf } from '@/lib/chat/types'
 import { useCronWatch } from '@/lib/cronWatch'
 import { useRuntime } from '@/lib/hermes'
-import { canStartNow, nextBackoffMs, STOP_COOLDOWN_MS } from '@/lib/keepAlivePolicy'
+import { decideStart, nextBackoffMs } from '@/lib/keepAlivePolicy'
 import { CHANNELS, notificationPermission, notify } from '@/lib/notify'
 import { speak } from '@/lib/voice'
 import { answerRequest, onTurnComplete, setActive, useChat } from '@/store/chat'
@@ -122,17 +122,23 @@ function useKeepAlive() {
       }
       if (!running) {
         const now = Date.now()
-        // Starting only from the foreground. A start posted right after a stop can interleave
-        // with the pending teardown and leave Android waiting forever for startForeground().
-        if (AppState.currentState !== 'active') return
-        if (!canStartNow(now, lastStopAt)) {
-          // Cooldown must delay, not drop: wake up when it expires instead of waiting for the
-          // next unrelated store change (which may never come).
+        // Starting only from the foreground, only outside the stop cooldown, only outside the
+        // retry backoff. The decision itself lives in keepAlivePolicy so it can be tested for real.
+        const decision = decideStart({
+          running,
+          foreground: AppState.currentState === 'active',
+          now,
+          lastStopAt,
+          retryAfter,
+        })
+        if (decision.action === 'skip') return
+        if (decision.action === 'wait') {
+          // A wait is a delay, not a drop: wake up when the gate opens instead of hoping some
+          // unrelated store change comes along.
           if (timer) clearTimeout(timer)
-          timer = setTimeout(sync, Math.max(0, lastStopAt + STOP_COOLDOWN_MS - now) + 20)
+          timer = setTimeout(sync, decision.delayMs + 20)
           return
         }
-        if (now < retryAfter) return
         const ok = KeepAlive.start(title, text)
         running = ok
         if (ok) {
