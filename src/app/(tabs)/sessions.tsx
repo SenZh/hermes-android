@@ -132,7 +132,12 @@ export default function SessionsScreen() {
 
   async function patch(row: SessionRow, body: Record<string, unknown>, message: string) {
     try {
-      await rest().patch(`/api/sessions/${encodeURIComponent(row.id)}`, body)
+      const payload = {
+        ...body,
+        request_id: `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        expected_revision: (row as any).runtime_revision ?? (row as any).revision ?? 0,
+      }
+      await rest().patch(`/api/sessions/${encodeURIComponent(row.id)}`, payload)
       toast(message, 'success')
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })
     } catch (e) {
@@ -153,7 +158,11 @@ export default function SessionsScreen() {
       for (const row of targets) {
         const rid = useChat.getState().storedToRuntime[row.id]
         if (rid) await closeRuntime(rid)
-        await rest().del(`/api/sessions/${encodeURIComponent(row.id)}`)
+        const reqId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+        const rev = (row as any).runtime_revision ?? (row as any).revision ?? 0
+        await rest().del(`/api/sessions/${encodeURIComponent(row.id)}`, undefined, {
+          query: { request_id: reqId, expected_revision: rev },
+        })
       }
       toast(targets.length === 1 ? t('Deleted') : t('{n} chats deleted', { n: targets.length }), 'success')
     } catch (e) {
@@ -165,7 +174,14 @@ export default function SessionsScreen() {
 
   async function patchMany(targets: SessionRow[], body: Record<string, unknown>, message: string) {
     try {
-      for (const row of targets) await rest().patch(`/api/sessions/${encodeURIComponent(row.id)}`, body)
+      for (const row of targets) {
+        const payload = {
+          ...body,
+          request_id: `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          expected_revision: (row as any).runtime_revision ?? (row as any).revision ?? 0,
+        }
+        await rest().patch(`/api/sessions/${encodeURIComponent(row.id)}`, payload)
+      }
       toast(message, 'success')
     } catch (e) {
       toastError(e)

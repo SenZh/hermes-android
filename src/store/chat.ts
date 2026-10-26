@@ -405,7 +405,9 @@ export function handleEvent(event: AnyGatewayEvent) {
               const elapsedMs = s.turnStartedAt ? Date.now() - s.turnStartedAt : undefined
               const turnUsage = (p.usage as Usage | undefined) ?? null
               const elapsedSec = elapsedMs ? elapsedMs / 1000 : 0
-              const tps = elapsedSec >= 0.5 && turnUsage?.output ? Number((turnUsage.output / elapsedSec).toFixed(1)) : null
+              // Calculate TPS: prefer reported usage output tokens; fallback to estimating tokens from output text
+              const outputTokens = turnUsage?.output || Math.round((finalText.length || 0) / 2.5)
+              const tps = elapsedSec >= 0.5 && outputTokens > 0 ? Number((outputTokens / elapsedSec).toFixed(1)) : null
               finished = {
                 ...m,
                 parts,

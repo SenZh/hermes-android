@@ -332,7 +332,12 @@ export function SessionMenu({ visible, onClose, session, onPickModel, onPickReas
             title={t('Archive')}
             onPress={run(async () => {
               if (!session.storedId) return
-              await rest().patch(`/api/sessions/${encodeURIComponent(session.storedId)}`, { archived: true })
+              const reqId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+              await rest().patch(`/api/sessions/${encodeURIComponent(session.storedId)}`, {
+                archived: true,
+                request_id: reqId,
+                expected_revision: 0,
+              })
               await closeRuntime(sid)
               toast(t('Archived'), 'success')
             })}
@@ -351,7 +356,12 @@ export function SessionMenu({ visible, onClose, session, onPickModel, onPickReas
                 return
               const stored = session.storedId
               await closeRuntime(sid)
-              if (stored) await rest().del(`/api/sessions/${encodeURIComponent(stored)}`)
+              if (stored) {
+                const reqId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+                await rest().del(`/api/sessions/${encodeURIComponent(stored)}`, undefined, {
+                  query: { request_id: reqId, expected_revision: 0 },
+                })
+              }
               toast(t('Deleted'), 'success')
             })}
             last
