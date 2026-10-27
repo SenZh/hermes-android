@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 
@@ -11,6 +11,13 @@ type Props = {
   onSingleTap?: () => void
   /** 全屏层用黑色背景，页面内嵌用透明。 */
   background?: string
+  /**
+   * 是否允许单指拖动。
+   *
+   * 内嵌预览必须关掉：它挂在页面的 ScrollView 里，Pan 会和纵向滚动抢手势，
+   * 用户想滚页面结果在拖图片。缩放与单击仍可用，进全屏后再拖。
+   */
+  enablePan?: boolean
 }
 
 /**
@@ -19,7 +26,7 @@ type Props = {
  * 手势回调跑在 UI 线程，只允许读写 shared value；任何分支判断都走 `@/lib/imageZoom`
  * 的纯函数，保证可被单测覆盖。
  */
-export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: Props) {
+export function ZoomableImage({ uri, onSingleTap, background = 'transparent', enablePan = true }: Props) {
   const scale = useSharedValue(MIN_SCALE)
   const originScale = useSharedValue(MIN_SCALE)
   const tx = useSharedValue(0)
@@ -51,10 +58,19 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: 
         toOrigin()
       } else {
         originScale.value = scale.value
+        // 缩小时可移动范围同步变小：5x 拖到边角再缩回 1.5x，旧偏移必须重新夹取，
+        // 否则图片会停在屏幕外。
+        const cw = contentW.value > 0 ? contentW.value : boxW.value
+        const ch = contentH.value > 0 ? contentH.value : boxH.value
+        tx.value = clampTranslation(tx.value, boxW.value, cw, scale.value)
+        ty.value = clampTranslation(ty.value, boxH.value, ch, scale.value)
+        originTx.value = tx.value
+        originTy.value = ty.value
       }
     })
 
   const pan = Gesture.Pan()
+    .enabled(enablePan)
     .onUpdate((e) => {
       if (scale.value <= MIN_SCALE) return
       // 内容尺寸取图片 contain 后的真实显示尺寸；拿容器尺寸会让边界大出一截，
@@ -71,7 +87,10 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: 
 
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
-    .onEnd(() => {
+    .onEnd((_e, success) => {
+      // handler 由 ACTIVE 转 FAILED/CANCELLED 时回调也会跑。不判 success 的话，
+      // 一次最终被识别成单击的点击会顺手把倍率也切了。
+      if (!success) return
       const next = nextDoubleTapScale(scale.value)
       if (next <= MIN_SCALE) {
         toOrigin()
@@ -83,7 +102,8 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: 
 
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
-    .onEnd(() => {
+    .onEnd((_e, success) => {
+      if (!success) return
       if (resolveSingleTap(scale.value) === 'reset') {
         toOrigin()
       } else if (onSingleTap) {
@@ -125,13 +145,5 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: 
         />
       </Animated.View>
     </GestureDetector>
-  )
-}
-
-export function ZoomableImageFrame({ uri, onSingleTap }: Props) {
-  return (
-    <View style={{ flex: 1, borderRadius: 12, overflow: 'hidden' }}>
-      <ZoomableImage uri={uri} onSingleTap={onSingleTap} />
-    </View>
   )
 }

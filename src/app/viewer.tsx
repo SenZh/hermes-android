@@ -2,12 +2,12 @@ import { Stack, useLocalSearchParams } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Directory, File, Paths } from 'expo-file-system'
 import * as FileSystem from 'expo-file-system/legacy'
-import { Image } from 'expo-image'
 import * as Linking from 'expo-linking'
 import * as Sharing from 'expo-sharing'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Markdown } from '@/components/chat/Markdown'
 import { CheckCircle2, Download, ExternalLink, FileText, FolderOpen, Share2 } from '@/components/icons'
@@ -85,6 +85,8 @@ export default function DocumentViewerScreen() {
   const [downloadBytesWritten, setDownloadBytesWritten] = useState(0)
   const [downloadTotalBytes, setDownloadTotalBytes] = useState(0)
   const [imageFullscreen, setImageFullscreen] = useState(false)
+  // 全屏层会盖住状态栏，关闭按钮必须按真实安全区下移，否则刘海/挖孔屏上会被挡住
+  const insets = useSafeAreaInsets()
 
   const isMountedRef = useRef(true)
   useEffect(() => {
@@ -163,7 +165,10 @@ export default function DocumentViewerScreen() {
     }
     try {
       if (Platform.OS === 'android' && KeepAlive.available) {
-        KeepAlive.openFolder(dirUri)
+        // 四层降级全部失败时会返回 false；静默会让用户以为点击没生效
+        if (!KeepAlive.openFolder(dirUri)) {
+          toast(t('Saved folder: {folder}', { folder: downloadRecord?.targetFolder || 'Downloads' }), 'info')
+        }
       } else {
         await Linking.openURL(dirUri)
       }
@@ -561,7 +566,7 @@ export default function DocumentViewerScreen() {
 
       {mime.startsWith('image/') && q.data ? (
         <View style={{ width: '100%', aspectRatio: 1, borderRadius: radius.md, overflow: 'hidden' }}>
-          <ZoomableImage uri={q.data.data_url} onSingleTap={() => setImageFullscreen(true)} />
+          <ZoomableImage uri={q.data.data_url} enablePan={false} onSingleTap={() => setImageFullscreen(true)} />
         </View>
       ) : null}
 
@@ -610,7 +615,7 @@ export default function DocumentViewerScreen() {
           <Pressable
             onPress={() => setImageFullscreen(false)}
             hitSlop={12}
-            style={{ position: 'absolute', top: 48, right: 20, padding: 8 }}
+            style={{ position: 'absolute', top: insets.top + 12, right: 20, padding: 8 }}
           >
             <Text style={{ color: '#fff', fontSize: 15 }}>{t('Done')}</Text>
           </Pressable>

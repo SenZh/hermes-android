@@ -9,6 +9,8 @@
 export const MIN_SCALE = 1
 /** 上限。再放大就只剩马赛克了。 */
 export const MAX_SCALE = 5
+/** 判定"是否已放大"的浮点容差。捏合产生的值几乎不会正好等于 1。 */
+export const SCALE_EPSILON = 0.001
 /** 双击直接跳到这个倍率，比逐级放大顺手。 */
 export const DOUBLE_TAP_SCALE = 2.5
 /** 捏合过程中允许短暂缩到 1x 以下，松手时再回弹——否则手指稍微一松就卡住不动。 */
@@ -16,7 +18,9 @@ export const RUBBER_BAND_FLOOR = 0.7
 
 /**
  * 把捏合产生的倍率夹到合法区间。
- * 手指离开时用 MIN_SCALE 兜底（不允许停在 1x 以下），过程中用 RUBBER_BAND_FLOOR。
+ *
+ * 过程中允许下探到 RUBBER_BAND_FLOOR，松手由 `shouldSnapBack` + 调用方回弹到 MIN_SCALE。
+ * 这里只负责夹取，不负责回弹。
  */
 export function clampScale(next: number, floor: number = RUBBER_BAND_FLOOR): number {
   'worklet'
@@ -41,13 +45,13 @@ export function shouldSnapBack(scale: number): boolean {
  */
 export function resolveSingleTap(scale: number): 'reset' | 'fullscreen' {
   'worklet'
-  return scale > MIN_SCALE + 0.001 ? 'reset' : 'fullscreen'
+  return scale > MIN_SCALE + SCALE_EPSILON ? 'reset' : 'fullscreen'
 }
 
 /** 双击在 1x 与 DOUBLE_TAP_SCALE 之间来回切。 */
 export function nextDoubleTapScale(scale: number): number {
   'worklet'
-  return scale > MIN_SCALE + 0.001 ? MIN_SCALE : DOUBLE_TAP_SCALE
+  return scale > MIN_SCALE + SCALE_EPSILON ? MIN_SCALE : DOUBLE_TAP_SCALE
 }
 
 /**

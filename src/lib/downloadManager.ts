@@ -86,11 +86,13 @@ export function calculateDownloadSpeed(
  * 纯函数：根据文件名推断准确的 MIME 类型（支持 APK 原生安装、PDF、压缩包等）。
  */
 export function inferMimeType(fileName: string, serverMime?: string): string {
+  const lower = fileName.toLowerCase()
+  // APK 必须先判，且压过服务端声明：服务端把 .apk 标成 text/plain 或 octet-stream 都很常见，
+  // 而 MIME 不准就走不到系统安装器（targetSdk>25 尤其明显）。
+  if (lower.endsWith('.apk')) return 'application/vnd.android.package-archive'
   if (serverMime && serverMime !== 'application/octet-stream' && serverMime !== '*/*') {
     return serverMime
   }
-  const lower = fileName.toLowerCase()
-  if (lower.endsWith('.apk')) return 'application/vnd.android.package-archive'
   if (lower.endsWith('.pdf')) return 'application/pdf'
   if (lower.endsWith('.zip')) return 'application/zip'
   if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) return 'application/gzip'

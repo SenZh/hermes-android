@@ -165,6 +165,12 @@ describe('DownloadManager: inferMimeType', () => {
     expect(inferMimeType('APP.APK', 'application/octet-stream')).toBe('application/vnd.android.package-archive')
   })
 
+  it('[TC-DL-25] APK 的扩展名必须压过服务端的错误声明', () => {
+    // 服务端把 apk 标成 text/plain 很常见；信了它就调不起系统安装器
+    expect(inferMimeType('app.apk', 'text/plain')).toBe('application/vnd.android.package-archive')
+    expect(inferMimeType('app.apk', 'application/zip')).toBe('application/vnd.android.package-archive')
+  })
+
   it('[TC-DL-24] 保留服务器已知合法类型，补齐常见文档与媒体类型', () => {
     expect(inferMimeType('doc.pdf')).toBe('application/pdf')
     expect(inferMimeType('archive.zip')).toBe('application/zip')

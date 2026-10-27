@@ -928,6 +928,58 @@ function testPackageVisibility() {
   console.log(' -> PASSED: Package visibility and install permission declared.\n')
 }
 
+function testGestureRobustness() {
+  console.log('[Test 28] Testing gesture robustness details...')
+  const component = fs.readFileSync(path.resolve('src/components/ZoomableImage.tsx'), 'utf-8')
+  const viewer = fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8')
+  const zoom = fs.readFileSync(path.resolve('src/lib/imageZoom.ts'), 'utf-8')
+
+  // Tap 回调忽略 success 时，ACTIVE->FAILED 的转换也会执行分支，
+  // 一次被判定为单击的点击会顺手把倍率切了
+  const tapBodies = component.match(/onEnd\(\(_e, success\) => \{/g) || []
+  assert.equal(tapBodies.length, 2, 'both single and double tap must inspect the success flag')
+  assert.equal(
+    (component.match(/if \(!success\) return/g) || []).length,
+    2,
+    'each tap handler must bail out when success is false',
+  )
+
+  // 内嵌预览的 Pan 会和页面纵向滚动抢手势
+  assert.ok(
+    viewer.includes('enablePan={false}'),
+    'inline preview must disable pan so vertical page scroll still works',
+  )
+  assert.ok(component.includes('.enabled(enablePan)'), 'pan must honour the enablePan switch')
+
+  // 缩小时可移动范围同步收缩，旧偏移必须重夹，否则图片停在屏幕外
+  assert.ok(
+    /originScale\.value = scale\.value[\s\S]{0,400}?clampTranslation\(tx\.value/.test(component),
+    'pinch end must re-clamp the existing translation for the new scale',
+  )
+
+  // 浮点容差不能是被复制两遍的魔数
+  assert.ok(zoom.includes('SCALE_EPSILON'), 'the zoom threshold must be a named constant')
+  assert.equal(
+    (zoom.match(/MIN_SCALE \+ 0\.001/g) || []).length,
+    0,
+    'no bare 0.001 literals left in comparisons',
+  )
+
+  // 全屏关闭按钮要避让安全区
+  assert.ok(viewer.includes('useSafeAreaInsets'), 'fullscreen close button must respect safe area insets')
+  assert.ok(!viewer.includes("top: 48"), 'hardcoded top:48 breaks on notched screens')
+
+  // APK 的扩展名必须压过服务端声明
+  const dl = fs.readFileSync(path.resolve('src/lib/downloadManager.ts'), 'utf-8')
+  const mimeFn = dl.slice(dl.indexOf('export function inferMimeType'), dl.indexOf('export function getDownloadStorageKey'))
+  assert.ok(
+    mimeFn.indexOf(".apk") < mimeFn.indexOf('serverMime &&'),
+    'the .apk branch must run BEFORE trusting the server MIME',
+  )
+
+  console.log(' -> PASSED: Gesture edge cases, safe areas and APK MIME precedence locked.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -956,7 +1008,8 @@ function runAll() {
   testImageViewerGestures()
   testWorkletDirectives()
   testPackageVisibility()
-  console.log('=== ALL 26 SUITES PASSED (0 ERRORS) ===')
+  testGestureRobustness()
+  console.log('=== ALL 27 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

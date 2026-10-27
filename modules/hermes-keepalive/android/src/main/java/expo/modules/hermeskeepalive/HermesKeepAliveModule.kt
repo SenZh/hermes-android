@@ -131,15 +131,12 @@ class HermesKeepAliveModule : Module() {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       }
-      try {
-        context.startActivity(intent)
-      } catch (_: Exception) {
-        val chooser = Intent.createChooser(intent, "Open").apply {
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(chooser)
-      }
-      true
+      if (attemptStart(intent)) return@Function true
+      // 没有应用直接处理时退到选择器；选择器本身也可能失败（无任何候选），
+      // 失败必须如实返回 false，不能假装成功让 UI 静默。
+      attemptStart(Intent.createChooser(intent, "Open").apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      })
     }
 
     /**
@@ -161,17 +158,14 @@ class HermesKeepAliveModule : Module() {
         uri
       }
 
-      fun attempt(intent: Intent): Boolean = try {
-        context.startActivity(intent)
-        true
-      } catch (_: Exception) {
-        false
-      }
-
-      val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+      // 交出去的是 tree URI，第三方文件管理器要在这个目录下继续遍历，
+      // 只给 READ 只能读入口那一个文档，必须再加 PREFIX。
+      val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+        Intent.FLAG_GRANT_PREFIX_URI_PERMISSION or
+        Intent.FLAG_ACTIVITY_NEW_TASK
 
       // L1: implicit. MIME_TYPE_DIR keeps unrelated apps (browsers, Google) out of the chooser.
-      if (attempt(Intent(Intent.ACTION_VIEW).apply {
+      if (attemptStart(Intent(Intent.ACTION_VIEW).apply {
           setDataAndType(docUri, DocumentsContract.Document.MIME_TYPE_DIR)
           addFlags(flags)
         })
@@ -181,7 +175,7 @@ class HermesKeepAliveModule : Module() {
       // NOT from EXTRA_INITIAL_URI — that extra only applies to OPEN_DOCUMENT* actions.
       // Passing it here would open the Files home page while still reporting success,
       // which would short-circuit the vendor fallbacks below.
-      if (attempt(Intent(Intent.ACTION_VIEW).apply {
+      if (attemptStart(Intent(Intent.ACTION_VIEW).apply {
           component = ComponentName("com.android.documentsui", "com.android.documentsui.files.FilesActivity")
           data = docUri
           addFlags(flags)
@@ -200,7 +194,7 @@ class HermesKeepAliveModule : Module() {
         if (context.packageManager.resolveActivity(Intent(Intent.ACTION_VIEW).setComponent(target), 0) == null) {
           continue
         }
-        if (attempt(Intent(Intent.ACTION_VIEW).apply {
+        if (attemptStart(Intent(Intent.ACTION_VIEW).apply {
             component = target
             putExtra(DocumentsContract.EXTRA_INITIAL_URI, docUri)
             addFlags(flags)
@@ -209,7 +203,7 @@ class HermesKeepAliveModule : Module() {
       }
 
       // L4: last resort. Costs the user one extra tap but always reaches the folder.
-      attempt(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+      attemptStart(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
         putExtra(DocumentsContract.EXTRA_INITIAL_URI, docUri)
         addFlags(flags)
       })
@@ -304,6 +298,13 @@ class HermesKeepAliveModule : Module() {
         else -> "appdetails"
       }
     }
+  }
+
+  private fun attemptStart(intent: Intent): Boolean = try {
+    context.startActivity(intent)
+    true
+  } catch (_: Exception) {
+    false
   }
 
   private companion object {

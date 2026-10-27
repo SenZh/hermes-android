@@ -1,9 +1,9 @@
 import Constants from 'expo-constants'
 import * as Clipboard from 'expo-clipboard'
-import { Stack } from 'expo-router'
+import { Stack, useFocusEffect } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import { BookOpen, Bug, BatteryCharging, Code2, MessageCircle, Rocket } from '@/components/icons'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Platform, View } from 'react-native'
 
 import { HermesMark } from '@/components/HermesMark'
@@ -23,6 +23,13 @@ export default function AboutScreen() {
   const health = useRest<{ version?: string; displayVersion?: string }>(['health'], '/api/health')
   const conn = useRuntime((s) => s.hermes?.conn)
   const [crash, setCrash] = useState<LastExit | null>(() => lastExit())
+  // 用户点进系统设置改完电池策略再返回，页面必须重读；只在 render 期读一次会一直显示旧状态。
+  const [batteryExempt, setBatteryExempt] = useState(() => KeepAlive.batteryOptimizationIgnored())
+  useFocusEffect(
+    useCallback(() => {
+      setBatteryExempt(KeepAlive.batteryOptimizationIgnored())
+    }, []),
+  )
   return (
     <Screen>
       <Stack.Screen options={{ title: t('About') }} />
@@ -76,11 +83,7 @@ export default function AboutScreen() {
           <Row
             icon={BatteryCharging}
             title={t('Battery optimization')}
-            subtitle={
-              KeepAlive.batteryOptimizationIgnored()
-                ? t('Exempt')
-                : t('Restricted — tap to allow background work')
-            }
+            subtitle={batteryExempt ? t('Exempt') : t('Restricted — tap to allow background work')}
             onPress={() => {
               if (!KeepAlive.requestBatteryExemption()) {
                 toast(t('Could not open battery settings'), 'info')
