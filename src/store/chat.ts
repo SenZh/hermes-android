@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { dismissToast, toast } from '@/components/ui/Dialogs'
 import { t } from '@/i18n'
 import { dropKnownRows, foldHistory, isToolError, type SessionMessageRow } from '@/lib/chat/history'
+import { withMediaCapabilityPrompt } from '@/lib/mediaPrompt'
 import {
   localId,
   type ChatMessage,
@@ -969,6 +970,11 @@ async function sendTo(rid: string, text: string, mode: SendMode, opts: { display
   const prompt = composePrompt(text, attachments)
   if (!prompt) return
 
+  // 新会话首轮带上客户端能力说明：走 api_text（模型可见、用户不可见），
+  // 教会模型用 MEDIA:/abs/path 交付文件。后续轮次不重复注入。
+  const isFirstTurn = opts.editRowId == null && !s.messages.some((m) => m.role === 'user')
+  const apiText = withMediaCapabilityPrompt(prompt, isFirstTurn)
+
   if (mode === 'steer' || mode === 'redirect') {
     const res = await gw.request(mode === 'steer' ? 'session.steer' : 'session.redirect', { session_id: rid, text: prompt })
     const status = (res as { status?: string }).status
@@ -1005,6 +1011,7 @@ async function sendTo(rid: string, text: string, mode: SendMode, opts: { display
     const res = await gw.request('prompt.submit', {
       session_id: rid,
       text: prompt,
+      ...(isFirstTurn ? { api_text: apiText } : {}),
       ...(opts.editRowId != null ? { truncate_before_row_id: opts.editRowId, confirm_truncate: true } : {}),
     })
     const status = res.status ?? 'streaming'

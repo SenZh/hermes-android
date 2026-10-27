@@ -1063,6 +1063,50 @@ function testWorkletSelfContained() {
   console.log(' -> PASSED: Every worklet is self-contained; no module scope is touched on the UI thread.\n')
 }
 
+function testMediaCapabilityInjection() {
+  console.log('[Test 31] Testing MEDIA capability prompt injection (api_text)...')
+  const chat = fs.readFileSync(path.resolve('src/store/chat.ts'), 'utf-8')
+  const contract = fs.readFileSync(path.resolve('src/lib/gateway/contract.generated.ts'), 'utf-8')
+  const media = fs.readFileSync(path.resolve('src/lib/mediaPrompt.ts'), 'utf-8')
+
+  // gateway 侧 session_cli_turn.py 支持 api_text（模型可见、用户不可见）；
+  // 客户端契约缺这个字段，注入就发不出去。
+  assert.ok(
+    /interface PromptSubmitParams \{[\s\S]{0,300}?api_text\?: string \| null/.test(contract),
+    'PromptSubmitParams must declare api_text',
+  )
+
+  // 只在首轮注入，否则每轮都烧一遍 token
+  assert.ok(
+    chat.includes('isFirstTurn'),
+    'chat store must compute an isFirstTurn flag',
+  )
+  assert.ok(
+    /isFirstTurn\s*=\s*opts\.editRowId == null && !s\.messages\.some\(\(m\) => m\.role === 'user'\)/.test(chat),
+    'first turn means: not an edit, and no user message in history yet',
+  )
+  assert.ok(
+    /\.\.\.\(isFirstTurn \? \{ api_text: apiText \} : \{\}\)/.test(chat),
+    'api_text must only be sent on the first turn',
+  )
+  // 用户看到的仍然是原文
+  assert.ok(
+    /text: prompt,/.test(chat),
+    'the user-visible text must stay the plain prompt',
+  )
+
+  // 提示词本身必须教对语法
+  for (const required of ['MEDIA:/服务端绝对路径', 'base64', '用户看不到', '绝对路径']) {
+    assert.ok(media.includes(required), `capability prompt must mention ${required}`)
+  }
+  assert.ok(
+    !/MEDIA_CAPABILITY_PROMPT\s*=\s*`[\s\S]*?inline/.test(media),
+    'sanity: prompt should not encourage inlining file contents',
+  )
+
+  console.log(' -> PASSED: Capability prompt is injected once, via api_text, without leaking to the user.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -1094,7 +1138,8 @@ function runAll() {
   testGestureRobustness()
   testVersionSourceOfTruth()
   testWorkletSelfContained()
-  console.log('=== ALL 29 SUITES PASSED (0 ERRORS) ===')
+  testMediaCapabilityInjection()
+  console.log('=== ALL 30 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()
