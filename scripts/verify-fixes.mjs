@@ -898,7 +898,9 @@ function testPackageVisibility() {
     path.resolve('modules/hermes-keepalive/android/src/main/AndroidManifest.xml'),
     'utf-8',
   )
-  const appManifest = fs.readFileSync(path.resolve('android/app/src/main/AndroidManifest.xml'), 'utf-8')
+  // android/ 整目录在 .gitignore 里，是 prebuild 产物：check job 跑在 prebuild 之前，
+  // 读它必然 ENOENT。权限必须断言在 app.json —— 那才是 prebuild 的唯一真源。
+  const appJson = JSON.parse(fs.readFileSync(path.resolve('app.json'), 'utf-8'))
 
   // targetSdk >= 30：未在 <queries> 声明的包，resolveActivity 恒为 null。
   // 缺了这段，openFolder 的厂商降级和自启动跳转会在真机上静默失效。
@@ -921,9 +923,10 @@ function testPackageVisibility() {
   )
 
   // APK 交给系统安装器需要这个权限，否则 openFile 对 .apk 也只会弹"无法打开"
+  const perms = appJson?.expo?.android?.permissions ?? []
   assert.ok(
-    appManifest.includes('REQUEST_INSTALL_PACKAGES'),
-    'REQUEST_INSTALL_PACKAGES is required for targetSdk > 25 to hand an APK to the installer',
+    perms.includes('android.permission.REQUEST_INSTALL_PACKAGES'),
+    'REQUEST_INSTALL_PACKAGES is required for targetSdk > 25 and must live in app.json (prebuild regenerates android/)',
   )
   console.log(' -> PASSED: Package visibility and install permission declared.\n')
 }
@@ -980,6 +983,31 @@ function testGestureRobustness() {
   console.log(' -> PASSED: Gesture edge cases, safe areas and APK MIME precedence locked.\n')
 }
 
+function testVersionSourceOfTruth() {
+  console.log('[Test 29] Testing version source of truth...')
+  const appJson = JSON.parse(fs.readFileSync(path.resolve('app.json'), 'utf-8'))
+  const version = appJson?.expo?.version
+  const code = appJson?.expo?.android?.versionCode
+
+  // android/app/build.gradle 整个目录被 gitignore，是 prebuild 产物。
+  // 只改那里等于没改 —— CI 每次都会用 app.json 重新生成。历史上 versionCode
+  // 因此长期停在 13，所有 preview 包都是同一个版本号。
+  assert.ok(typeof version === 'string' && version.length > 0, 'app.json expo.version must be set')
+  assert.ok(Number.isInteger(code) && code > 0, 'app.json expo.android.versionCode must be a positive integer')
+  assert.ok(code >= 39, `versionCode must keep climbing past the stuck-at-13 era (got ${code})`)
+
+  // CHANGELOG 最新条目必须与 app.json 的版本一致，防止"改了版本忘了写日志"
+  const changelog = fs.readFileSync(path.resolve('CHANGELOG.md'), 'utf-8')
+  const firstEntry = changelog.match(/## \[v([^\]]+)\]/)?.[1]
+  assert.equal(
+    firstEntry,
+    version,
+    `CHANGELOG top entry (${firstEntry}) must match app.json version (${version})`,
+  )
+
+  console.log(' -> PASSED: Version numbers come from app.json and agree with the changelog.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -1009,7 +1037,8 @@ function runAll() {
   testWorkletDirectives()
   testPackageVisibility()
   testGestureRobustness()
-  console.log('=== ALL 27 SUITES PASSED (0 ERRORS) ===')
+  testVersionSourceOfTruth()
+  console.log('=== ALL 28 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

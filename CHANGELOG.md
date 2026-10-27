@@ -4,6 +4,12 @@
 
 > 审查的 medium 级发现与关键 low 级发现，全部修复并补上对应门禁。
 
+### ⚠️ 构建配置修复（影响所有历史 preview 包）
+
+- **`versionCode` 一直停在 13**：`android/` 整个目录被 `.gitignore` 排除，是 `prebuild` 的产物。历次发布的版本号只改在 `android/app/build.gradle` 里，**从未进入仓库**，CI 每次 prebuild 都用 `app.json` 的 `expo.android.versionCode` 重新生成，所以 preview.17 到 preview.24 的安装包版本号全是 13。现已把 `versionCode` 提到 39，并在 `app.json` 修正为唯一真源。
+- **`REQUEST_INSTALL_PACKAGES` 同样写在会被覆盖的文件里**：已改到 `app.json` 的 `expo.android.permissions`。
+- 新增 Test 29 锁定：`versionCode > 0` 且不低于 39，`app.json` 的 `expo.version` 必须与 CHANGELOG 首条一致。
+
 ### 🛠 修复 (Fixes)
 
 - **缩小后图片停在屏幕外**：捏合结束时只回写倍率，没按新倍率重新夹取已有偏移。5x 拖到边角再缩回 1.5x，可移动范围变小而旧偏移还在，图片直接跑到可视区外。现在捏合结束会重夹 `tx/ty`。
