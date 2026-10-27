@@ -47,8 +47,9 @@ To ensure stability and keep internal testing builds isolated from production, f
    - Internal test builds (Preview APKs) are triggered via `workflow_dispatch` on feature branches or tags like `v*-preview.*`.
    - **Internal builds must remain private**: Artifacts are downloaded via GitHub Actions Artifacts or private internal distribution channels. Never publish unfinished `preview` versions to public GitHub Releases.
 3. **Official Releases**:
-   - Official production tags follow strict SemVer (e.g., `v1.8.3`, exactly three numbers, no preview suffix).
+   - Official production tags follow strict SemVer (e.g., `v1.9.0`, exactly three numbers, no preview suffix).
    - A tag must be cut ONLY after complete automated CI verification and manual sign-off on real devices.
+   - **Changelog Engineering Standard**: Follow `docs/changelog-guidelines.md` strictly. Release notes must be structured (New Features, Improvements, Bug Fixes), high-signal, and maintain professional engineering depth (Symptom -> Root Cause -> Fix) instead of casual colloquialisms.
 
 ---
 
