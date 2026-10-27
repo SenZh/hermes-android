@@ -1,5 +1,21 @@
 # 更新日志 (Changelog)
 
+## [v1.8.3-preview.31] - 2026-10-27
+
+### ↩ 撤销
+
+- **撤销「客户端能力自述提示词」**（preview.28–30）。结论是当前 agent 本来就清楚 MEDIA 交付方式，客户端注入属于重复建设，还平白占首轮 token。
+  - 移除 `src/lib/mediaPrompt.ts`、`src/lib/workspacePath.ts` 及其单测。
+  - `textOf()` 恢复为纯文本拼接，不再做剥离。
+  - chat store 恢复为只发 `text`，不再拼能力说明、不再预取工作区路径。
+  - `PromptSubmitParams` 里错误的 `api_text` 字段保持移除（它本来就不在 wire 契约里，传了会被直接拒绝）。
+
+### 保留下来的
+
+- preview.27 的图片能力：默认满屏保持比例、双指缩放、放大后可拖动、双击切换倍率、单击进全屏。
+- preview.26 的 worklet 修复（不再引用模块作用域）。
+
+
 ## [v1.8.3-preview.30] - 2026-10-27
 
 ### 🛠 致命修复

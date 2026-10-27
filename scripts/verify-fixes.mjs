@@ -1063,83 +1063,6 @@ function testWorkletSelfContained() {
   console.log(' -> PASSED: Every worklet is self-contained; no module scope is touched on the UI thread.\n')
 }
 
-function testMediaCapabilityInjection() {
-  console.log('[Test 31] Testing MEDIA capability prompt injection (marker + strip)...')
-  const chat = fs.readFileSync(path.resolve('src/store/chat.ts'), 'utf-8')
-  const contract = fs.readFileSync(path.resolve('src/lib/gateway/contract.generated.ts'), 'utf-8')
-  const media = fs.readFileSync(path.resolve('src/lib/mediaPrompt.ts'), 'utf-8')
-  const types = fs.readFileSync(path.resolve('src/lib/chat/types.ts'), 'utf-8')
-
-  // 契约用 pydantic extra=forbid，api_text 不在字段表里 —— 传了会 4124 直接拒绝。
-  // 真机已复现：invalid params for prompt.submit: api_text: Extra inputs are not permitted
-  assert.ok(
-    !/api_text/.test(contract),
-    'api_text must NOT be added to PromptSubmitParams: the wire contract forbids extra fields',
-  )
-  {
-    // 注释里说明「为什么不用 api_text」是对的；代码里出现才是错
-    const chatCode = chat.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-    assert.ok(
-      !/api_text/.test(chatCode),
-      'the client must not send api_text — the backend rejects it outright',
-    )
-  }
-
-  // 改为拼进首轮文本，再用标记剥离
-  assert.ok(media.includes('CAPABILITY_MARKER'), 'the capability block must be fenced by a marker')
-  assert.ok(media.includes('export function stripCapability'), 'a strip function must exist')
-  assert.ok(
-    /chat\.includes\('stripCapability'\)|true/.test('true') && chat.includes('stripCapability'),
-    'the sender bubble must strip the block too',
-  )
-
-  // 所有展示入口统一走 textOf，剥离必须在那里发生，否则重新加载的历史会露出来
-  assert.ok(
-    /textOf|export function textOf/.test(types) && types.includes('stripCapability(raw)'),
-    'textOf() is the single render entry; it must strip the block',
-  )
-  assert.ok(
-    /message\.role === 'user' \? stripCapability\(raw\) : raw/.test(types),
-    'only user messages carry the block; do not touch assistant text',
-  )
-
-  // 首轮判断
-  assert.ok(
-    /const isFirstTurn = opts\.editRowId == null && !s\.messages\.some\(\(m\) => m\.role === 'user'\)/.test(chat),
-    'first turn means: not an edit, and no user message in history yet',
-  )
-  assert.ok(
-    /withMediaCapabilityPrompt\(prompt, true, ws\.defaultCwd\)/.test(chat),
-    'the real defaultCwd must be passed through, not a literal',
-  )
-
-  // 提示词内容
-  for (const required of ['MEDIA:/服务端绝对路径', 'base64', '用户看不到', '绝对路径', '不要假设前缀']) {
-    assert.ok(media.includes(required), `capability prompt must mention ${required}`)
-  }
-
-  // 路径前缀一律不许写死
-  for (const bad of ['/opt/data', '/home/', 'C:\\']) {
-    assert.ok(
-      !media.includes(bad),
-      `capability prompt must not hardcode ${bad} — the workspace path differs per deployment`,
-    )
-  }
-
-  const ws = fs.readFileSync(path.resolve('src/lib/workspacePath.ts'), 'utf-8')
-  assert.ok(ws.includes('/api/chat/workspaces'), 'workspace cwd must come from the server endpoint')
-  assert.ok(ws.includes('default_cwd'), 'the response field is default_cwd')
-  {
-    const wsCode = ws.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
-    assert.ok(
-      !/\/opt\/data|\/home\/|[A-Z]:\\\\/.test(wsCode),
-      'workspacePath must not hardcode an absolute path in code',
-    )
-  }
-
-  console.log(' -> PASSED: Capability block is appended on first turn and stripped from every render path.\n')
-}
-
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -1171,8 +1094,7 @@ function runAll() {
   testGestureRobustness()
   testVersionSourceOfTruth()
   testWorkletSelfContained()
-  testMediaCapabilityInjection()
-  console.log('=== ALL 30 SUITES PASSED (0 ERRORS) ===')
+  console.log('=== ALL 29 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

@@ -1,4 +1,3 @@
-import { stripCapability } from '@/lib/mediaPrompt'
 import type { SessionLiveInfo, SubagentEventPayload, Usage } from '@/lib/gateway/contract.generated'
 
 export interface ToolPart {
@@ -101,11 +100,8 @@ let counter = 0
 export const localId = (prefix = 'm') => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
 export function textOf(message: ChatMessage) {
-  const raw = message.parts
+  return message.parts
     .filter((p): p is { kind: 'text'; text: string } => p.kind === 'text')
     .map((p) => p.text)
     .join('')
-  // 客户端能力说明只存在于模型侧（拼在首轮用户文本后面）。凡是往界面上画的地方都走这里，
-  // 所以在这里剥一次，发送时的气泡和从服务端重新加载的历史都不会露出来。
-  return message.role === 'user' ? stripCapability(raw) : raw
 }
