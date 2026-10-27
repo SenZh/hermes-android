@@ -1008,6 +1008,56 @@ function testVersionSourceOfTruth() {
   console.log(' -> PASSED: Version numbers come from app.json and agree with the changelog.\n')
 }
 
+function testWorkletSelfContained() {
+  console.log('[Test 30] Testing worklet self-containment (no module refs inside worklets)...')
+  const zoom = fs.readFileSync(path.resolve('src/lib/imageZoom.ts'), 'utf-8')
+  const component = fs.readFileSync(path.resolve('src/components/ZoomableImage.tsx'), 'utf-8')
+
+  // 真机事故：clampScale 的默认参数 floor = RUBBER_BAND_FLOOR 在 UI 线程求值时
+  // 报 "Property 'RUBBER_BAND_FLOOR' doesn't exist" 并直接 crash。
+  // babel 的 worklet 插件只捕获函数体里直接引用的自由变量，参数默认值里的不捕获。
+  const CONSTS = ['MIN_SCALE', 'MAX_SCALE', 'SCALE_EPSILON', 'DOUBLE_TAP_SCALE', 'RUBBER_BAND_FLOOR']
+  const stripComments = (src) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+
+  // 1) imageZoom 的每个 worklet 函数体不得引用模块常量
+  const fnNames = ['clampScale', 'shouldSnapBack', 'resolveSingleTap', 'nextDoubleTapScale', 'clampTranslation']
+  for (const fn of fnNames) {
+    const at = zoom.indexOf(`export function ${fn}`)
+    assert.ok(at >= 0, `${fn} must be exported`)
+    const rest = zoom.slice(at + 1)
+    const nextExport = rest.indexOf('\nexport ')
+    const body = stripComments(nextExport >= 0 ? rest.slice(0, nextExport) : rest)
+    assert.ok(body.includes("'worklet'"), `${fn} must be a worklet`)
+    for (const c of CONSTS) {
+      assert.ok(
+        !body.includes(c),
+        `${fn} is a worklet and must not reference module constant ${c} — it will be undefined on the UI thread`,
+      )
+    }
+    // 参数默认值同样在 UI 线程求值，禁止任何默认值
+    assert.ok(
+      !/export function \w+\([^)]*=[^)]*\)/.test(body.slice(0, body.indexOf('{'))),
+      `${fn} must not use a default parameter: defaults are evaluated on the UI thread and cannot see module scope`,
+    )
+  }
+
+  // 2) 组件里的 worklet 回调不得引用模块常量（useSharedValue 初始化是普通 JS，允许）
+  const componentLines = component
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('import '))
+    .filter((l) => !l.includes('useSharedValue(MIN_SCALE)'))
+  const componentClean = stripComments(componentLines.join('\n'))
+  for (const c of CONSTS) {
+    assert.ok(
+      !componentClean.includes(c),
+      `ZoomableImage worklets must not reference ${c}; use the literal and keep parity via tests`,
+    )
+  }
+
+  console.log(' -> PASSED: Every worklet is self-contained; no module scope is touched on the UI thread.\n')
+}
+
 function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
@@ -1038,7 +1088,8 @@ function runAll() {
   testPackageVisibility()
   testGestureRobustness()
   testVersionSourceOfTruth()
-  console.log('=== ALL 28 SUITES PASSED (0 ERRORS) ===')
+  testWorkletSelfContained()
+  console.log('=== ALL 29 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

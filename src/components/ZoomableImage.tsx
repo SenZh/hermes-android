@@ -41,10 +41,11 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent', en
 
   const toOrigin = () => {
     'worklet'
-    scale.value = withTiming(MIN_SCALE)
+    // 1 = MIN_SCALE。worklet 内不能引用模块常量（默认参数/闭包捕获都会丢），必须写字面量。
+    scale.value = withTiming(1)
     tx.value = withTiming(0)
     ty.value = withTiming(0)
-    originScale.value = MIN_SCALE
+    originScale.value = 1
     originTx.value = 0
     originTy.value = 0
   }
@@ -72,7 +73,7 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent', en
   const pan = Gesture.Pan()
     .enabled(enablePan)
     .onUpdate((e) => {
-      if (scale.value <= MIN_SCALE) return
+      if (scale.value <= 1) return
       // 内容尺寸取图片 contain 后的真实显示尺寸；拿容器尺寸会让边界大出一截，
       // 取满时整幅图移出视野只剩黑底。
       const cw = contentW.value > 0 ? contentW.value : boxW.value
@@ -92,7 +93,7 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent', en
       // 一次最终被识别成单击的点击会顺手把倍率也切了。
       if (!success) return
       const next = nextDoubleTapScale(scale.value)
-      if (next <= MIN_SCALE) {
+      if (next <= 1) {
         toOrigin()
       } else {
         scale.value = withTiming(next)

@@ -1,15 +1,20 @@
 /**
  * 图片查看器的缩放策略（纯函数，不碰 UI，便于单测）。
  *
- * 手势回调跑在 UI 线程，必须保持极简；所有可判定的数学与状态决策都放这里，
- * 组件只做共享值的读写。
+ * 这些函数带 `'worklet'` 指令，会在 UI 线程执行。**worklet 内不得引用任何模块级标识符**，
+ * 包括参数默认值里的常量：babel 的 worklet 插件只捕获函数体里直接引用的自由变量，
+ * 默认参数中的引用不会被捕获，真机表现是
+ * `Property 'RUBBER_BAND_FLOOR' doesn't exist` 并直接 crash。
+ *
+ * 所以每个 worklet 函数体都用字面量；下面的导出常量只给普通 JS 侧和测试用，
+ * 一致性由 TC-ZOOM-12 与 verify-fixes 的 Test 30 锁定。
  */
 
 /** 原始大小：图片铺满容器但保持完整比例。 */
 export const MIN_SCALE = 1
 /** 上限。再放大就只剩马赛克了。 */
 export const MAX_SCALE = 5
-/** 判定"是否已放大"的浮点容差。捏合产生的值几乎不会正好等于 1。 */
+/** 判定「是否已放大」的浮点容差。捏合产生的值几乎不会正好等于 1。 */
 export const SCALE_EPSILON = 0.001
 /** 双击直接跳到这个倍率，比逐级放大顺手。 */
 export const DOUBLE_TAP_SCALE = 2.5
@@ -19,22 +24,23 @@ export const RUBBER_BAND_FLOOR = 0.7
 /**
  * 把捏合产生的倍率夹到合法区间。
  *
- * 过程中允许下探到 RUBBER_BAND_FLOOR，松手由 `shouldSnapBack` + 调用方回弹到 MIN_SCALE。
+ * 过程中允许下探到 1x 以下，松手由 `shouldSnapBack` + 调用方回弹。
  * 这里只负责夹取，不负责回弹。
  */
-export function clampScale(next: number, floor: number = RUBBER_BAND_FLOOR): number {
+export function clampScale(next: number, floor?: number): number {
   'worklet'
-  // 只有 NaN 无意义；±Infinity 按上下限处理，否则极限捏合会被误判成归零。
-  if (Number.isNaN(next)) return MIN_SCALE
-  if (next < floor) return floor
-  if (next > MAX_SCALE) return MAX_SCALE
+  // 0.7 / 1 / 5 必须与 RUBBER_BAND_FLOOR / MIN_SCALE / MAX_SCALE 一致（TC-ZOOM-12 锁定）
+  const lo = floor === undefined ? 0.7 : floor
+  if (Number.isNaN(next)) return 1
+  if (next < lo) return lo
+  if (next > 5) return 5
   return next
 }
 
 /** 松手后是否该回弹到原始大小。 */
 export function shouldSnapBack(scale: number): boolean {
   'worklet'
-  return scale < MIN_SCALE
+  return scale < 1
 }
 
 /**
@@ -45,13 +51,15 @@ export function shouldSnapBack(scale: number): boolean {
  */
 export function resolveSingleTap(scale: number): 'reset' | 'fullscreen' {
   'worklet'
-  return scale > MIN_SCALE + SCALE_EPSILON ? 'reset' : 'fullscreen'
+  const epsilon = 0.001
+  return scale > 1 + epsilon ? 'reset' : 'fullscreen'
 }
 
-/** 双击在 1x 与 DOUBLE_TAP_SCALE 之间来回切。 */
+/** 双击在 1x 与 2.5x 之间来回切。 */
 export function nextDoubleTapScale(scale: number): number {
   'worklet'
-  return scale > MIN_SCALE + SCALE_EPSILON ? MIN_SCALE : DOUBLE_TAP_SCALE
+  const epsilon = 0.001
+  return scale > 1 + epsilon ? 1 : 2.5
 }
 
 /**

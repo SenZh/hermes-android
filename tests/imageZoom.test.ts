@@ -9,6 +9,7 @@ import {
   nextDoubleTapScale,
   resolveSingleTap,
   RUBBER_BAND_FLOOR,
+  SCALE_EPSILON,
   shouldSnapBack,
 } from '@/lib/imageZoom'
 
@@ -56,6 +57,26 @@ describe('ImageZoom: 双击', () => {
     expect(nextDoubleTapScale(MIN_SCALE)).toBe(DOUBLE_TAP_SCALE)
     expect(nextDoubleTapScale(DOUBLE_TAP_SCALE)).toBe(MIN_SCALE)
     expect(nextDoubleTapScale(4)).toBe(MIN_SCALE)
+  })
+})
+
+describe('ImageZoom: 常量与 worklet 字面量的一致性', () => {
+  // worklet 函数体里只能写字面量（引用模块常量在 UI 线程会 crash），
+  // 所以必须用运行时行为反查字面量与导出常量是否还一致。
+  it('[TC-ZOOM-12] 字面量与导出常量保持同值', () => {
+    expect(clampScale(0.1)).toBe(RUBBER_BAND_FLOOR)
+    expect(clampScale(99)).toBe(MAX_SCALE)
+    expect(clampScale(Number.NaN)).toBe(MIN_SCALE)
+    expect(clampScale(2, MIN_SCALE)).toBe(2)
+
+    expect(shouldSnapBack(MIN_SCALE - 0.01)).toBe(true)
+    expect(shouldSnapBack(MIN_SCALE)).toBe(false)
+
+    expect(nextDoubleTapScale(MIN_SCALE)).toBe(DOUBLE_TAP_SCALE)
+    expect(nextDoubleTapScale(DOUBLE_TAP_SCALE)).toBe(MIN_SCALE)
+
+    expect(resolveSingleTap(MIN_SCALE)).toBe('fullscreen')
+    expect(resolveSingleTap(MIN_SCALE + SCALE_EPSILON * 2)).toBe('reset')
   })
 })
 

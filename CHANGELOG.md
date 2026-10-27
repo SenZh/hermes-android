@@ -1,5 +1,26 @@
 # 更新日志 (Changelog)
 
+## [v1.8.3-preview.26] - 2026-10-27
+
+### 🛠 致命缺陷修复 (Critical)
+
+- **捏合即 crash**：真机报 `com.facebook.jni.CppException: Property 'RUBBER_BAND_FLOOR' doesn't exist`。
+  `clampScale` 的默认参数 `floor = RUBBER_BAND_FLOOR` 在 UI 线程求值时变量不存在——
+  babel 的 worklet 插件只捕获**函数体**里直接引用的自由变量，**参数默认值里的不捕获**。
+  现已移除所有 worklet 的默认参数，函数体改用字面量，模块常量只留给普通 JS 侧与测试使用。
+- 同一问题在组件侧同样存在：`toOrigin`、`pan.onUpdate`、双击分支的 worklet 体里引用了 `MIN_SCALE`，
+  一并改为字面量。
+
+### 🧪 门禁
+
+- 新增 Test 30：静态扫描 `imageZoom.ts` 的五个 worklet 与 `ZoomableImage.tsx` 的 worklet 回调，
+  禁止出现任何模块常量名，并禁止 worklet 使用默认参数。
+- 新增 TC-ZOOM-12：用运行时行为反查「worklet 里的字面量」与「导出常量」是否仍然同值，
+  防止以后改常量忘了改字面量。
+- 变异验证：把崩溃原样写回去（默认参数引用 `RUBBER_BAND_FLOOR`）→ 拦住；函数体引用 `MIN_SCALE` → 拦住；
+  组件 worklet 引用 `MIN_SCALE` → 拦住。
+
+
 ## [v1.8.3-preview.25] - 2026-10-27
 
 > 审查的 medium 级发现与关键 low 级发现，全部修复并补上对应门禁。
