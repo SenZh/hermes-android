@@ -2,82 +2,40 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 
-// 1. 测试 Provider 过滤逻辑（模拟 ModelPicker 与 ModelChooser 的数据结构）
+// 1. Provider 过滤：断言必须落在真实组件上。
+//    旧版在测试内重写了一份 filter 再断言那份副本，改坏 ModelPicker 也照样绿 —— 循环自证。
 function testProviderFilter() {
-  console.log('[Test 1] Testing Provider Filtering Logic...')
-
-  const rawProviders = [
-    { slug: 'openai', name: 'OpenAI', authenticated: false, models: ['gpt-4o', 'o1'] },
-    { slug: 'anthropic', name: 'Anthropic', authenticated: false, models: ['claude-3-5-sonnet'] },
-    { slug: 'cpa', name: 'CPA', authenticated: true, models: ['deepseek-v4.1-flash', 'gemini-3.7-flash'] },
-    { slug: 'gitee', name: 'Gitee AI', authenticated: true, models: ['qwen3-embedding'] },
-    { slug: 'mistral', name: 'Mistral', authenticated: false, models: ['mistral-large'] },
-  ]
-
-  // ModelPicker 过滤规则
-  const filteredPicker = rawProviders.filter((p) => !!p.authenticated)
-  assert.equal(filteredPicker.length, 2, 'ModelPicker should only keep 2 authenticated providers')
-  assert.deepEqual(
-    filteredPicker.map((p) => p.slug),
-    ['cpa', 'gitee'],
-    'Only CPA and Gitee AI should survive',
+  console.log('[Test 1] Testing Provider Filtering (reads ModelPicker source)...')
+  const src = fs.readFileSync(path.resolve('src/components/chat/ModelPicker.tsx'), 'utf-8')
+  assert.ok(
+    /\.filter\(\(p\)\s*=>\s*!!p\.authenticated\)/.test(src),
+    'ModelPicker must filter to authenticated providers with !!p.authenticated',
   )
-
-  // ModelChooser 过滤规则
-  const filteredChooser = rawProviders.filter((p) => p.authenticated !== false)
-  assert.equal(filteredChooser.length, 2, 'ModelChooser should only keep authenticated providers')
-  assert.deepEqual(
-    filteredChooser.map((p) => p.slug),
-    ['cpa', 'gitee'],
-    'Only CPA and Gitee AI should survive',
+  assert.ok(
+    src.includes('authed: !!cur.authenticated') || src.includes('authed: !!p.authenticated'),
+    'per-provider auth flag must be derived from the real field',
   )
-
-  console.log(' -> PASSED: Provider filtering blocks unauthenticated entries with 100% precision.\n')
+  console.log(' -> PASSED: Provider filtering is asserted against the real component.\n')
 }
 
-// 2. 测试受管沙箱路径安全判定逻辑
+// 2. 路径规范化：逻辑已下沉到 src/lib/pathNormalize.ts，由 tests/pathNormalize.test.ts
+//    真实 import 覆盖。这里只验 viewer 确实调用了它，防止有人把内联副本写回来。
 function testPathSecurityGuard() {
-  console.log('[Test 2] Testing Managed Files Sandbox Guard & Normalizer...')
-
-  function normalizeAndVerify(rawPath) {
-    if (!rawPath) return { safe: false, path: '' }
-    let p = rawPath
-      .replace(/^sandbox:\/?\/?/, '')
-      .replace(/^\.\//, '')
-      .trim()
-    if (p.startsWith('/')) {
-      if (!p.startsWith('/opt/data/')) {
-        p = p.replace(/^\//, '')
-      }
-    }
-    let normalized = p
-    if (normalized.startsWith('/opt/data/')) {
-      // 允许
-    } else if (normalized.startsWith('workspace/')) {
-      normalized = `/opt/data/${normalized}`
-    } else {
-      normalized = `/opt/data/workspace/${normalized}`
-    }
-    const safe = normalized.startsWith('/opt/data')
-    return { safe, path: normalized }
-  }
-
-  // 截图复现场景：output/test-client-document.md
-  const t1 = normalizeAndVerify('output/test-client-document.md')
-  assert.equal(t1.safe, true, 'output/xxx MUST be safe')
-  assert.equal(t1.path, '/opt/data/workspace/output/test-client-document.md', 'output/xxx must resolve into workspace')
-
-  // /output/xxx 带着斜杠开头
-  const t2 = normalizeAndVerify('/output/test-client-document.md')
-  assert.equal(t2.safe, true, '/output/xxx MUST be resolved to workspace')
-  assert.equal(t2.path, '/opt/data/workspace/output/test-client-document.md')
-
-  // sandbox: 协议
-  const t3 = normalizeAndVerify('sandbox:/output/test.txt')
-  assert.equal(t3.safe, true)
-  assert.equal(t3.path, '/opt/data/workspace/output/test.txt')
-
-  console.log(' -> PASSED: Path normalizer strictly maps relative and workspace files to managed root.\n')
+  console.log('[Test 2] Testing Managed Files path normalizer wiring...')
+  const viewer = fs.readFileSync(path.resolve('src/app/viewer.tsx'), 'utf-8')
+  assert.ok(
+    viewer.includes('normalizeManagedPath(rawPath)'),
+    'viewer must delegate path normalization to the pure module',
+  )
+  assert.ok(
+    viewer.includes('isManagedPath(normalized)'),
+    'viewer must delegate the sandbox check to the pure module',
+  )
+  assert.ok(
+    !viewer.includes("replace(/^sandbox:"),
+    'inline normalization must not creep back into the screen — it belongs in src/lib/pathNormalize.ts',
+  )
+  console.log(' -> PASSED: Path normalization is delegated, and unit-tested for real.\n')
 }
 
 // 3. 测试 Android Inverted FlatList 下选择性禁用 selectable 逻辑
@@ -756,6 +714,21 @@ function testVendorRomAdaptation() {
     folderBody.includes('com.android.documentsui'),
     'openFolder L2 must fall back to explicit DocumentsUI',
   )
+  {
+    // FilesActivity 的落点只认 getData()；EXTRA_INITIAL_URI 仅对 OPEN_DOCUMENT* 生效。
+    // 写成 putExtra 会打开 Files 首页却仍报成功，把后面的厂商降级整段屏蔽掉。
+    const docUiAt = folderBody.indexOf('com.android.documentsui')
+    const l3At = folderBody.indexOf('vendorBrowsers')
+    const docUiChunk = folderBody.slice(docUiAt, l3At > docUiAt ? l3At : docUiAt + 500)
+    assert.ok(
+      docUiChunk.includes('data = docUri'),
+      'DocumentsUI branch must set data = docUri (getData is the only landing hint it honours)',
+    )
+    assert.ok(
+      !docUiChunk.includes('EXTRA_INITIAL_URI'),
+      'DocumentsUI branch must not rely on EXTRA_INITIAL_URI — it is ignored for ACTION_VIEW',
+    )
+  }
   assert.ok(
     folderBody.includes('com.miui.fileexplorer') && folderBody.includes('com.huawei.hidisk'),
     'openFolder L3 must probe vendor file managers',
@@ -768,11 +741,42 @@ function testVendorRomAdaptation() {
     folderBody.includes('resolveActivity'),
     'vendor components must be probed before being launched',
   )
+  // 探测必须真的决定分支。历史上用 `if (true || resolveActivity(...))` 就能把
+  // 整段探测变成死代码而静态断言全绿 —— 常量化短路是这套门禁最容易被绕过的地方。
+  assert.ok(
+    !/if\s*\(\s*(true|false)\s*(\|\||&&)/.test(moduleSrc),
+    'permission probes must not be short-circuited by a constant condition',
+  )
+  {
+    // 必须是真正的 continue 语句；写成 // continue 也会被 indexOf 命中，所以按整行匹配
+    const continueMatch = folderBody.match(/\n\s*continue\s*(?=\n)/)
+    const probeAt = folderBody.indexOf('resolveActivity')
+    const continueAt = continueMatch ? folderBody.indexOf(continueMatch[0]) : -1
+    assert.ok(
+      probeAt >= 0 && continueAt > probeAt,
+      'vendor probe must be followed by a live skip branch, not merely mentioned',
+    )
+    const between = folderBody.slice(probeAt, continueAt)
+    assert.ok(
+      between.includes('== null'),
+      'the skip branch must key off "resolveActivity(...) == null" — anything else is dead code',
+    )
+  }
 
-  // 自启动：五家厂商 + 兜底应用详情页
+  // 自启动：五家厂商 + 兜底应用详情页。
+  // 只查包名不够 —— 包名对、Activity 类名写错时 startActivity 照样抛 ActivityNotFound，
+  // 静态断言必须同时锁住两个部分。
   const autoFn = moduleSrc.slice(moduleSrc.indexOf('Function("openAutoStartSettings")'))
-  for (const pkg of ['com.miui.securitycenter', 'com.huawei.systemmanager', 'com.coloros.safecenter', 'com.vivo.permissionmanager', 'com.samsung.android.sm']) {
+  const vendorMap = {
+    'com.miui.securitycenter': 'AutoStartManagementActivity',
+    'com.huawei.systemmanager': 'StartupNormalAppListActivity',
+    'com.coloros.safecenter': 'StartupAppListActivity',
+    'com.vivo.permissionmanager': 'BgStartUpManagerActivity',
+    'com.samsung.android.sm': 'SmartManagerDashBoardActivity',
+  }
+  for (const [pkg, activity] of Object.entries(vendorMap)) {
     assert.ok(autoFn.includes(pkg), `auto-start must map ${pkg}`)
+    assert.ok(autoFn.includes(activity), `${pkg} requires the real activity ${activity}, not just the package`)
   }
   assert.ok(
     autoFn.includes('Settings.ACTION_APPLICATION_DETAILS_SETTINGS'),
@@ -809,39 +813,119 @@ function testImageViewerGestures() {
     /mime\.startsWith\('image\/'\)[\s\S]{0,300}?<ZoomableImage/.test(viewer),
     'images must render through ZoomableImage, not a bare static Image',
   )
+
+  // 全屏必须是 Modal。absoluteFill 挂在 <Screen> 内只会覆盖滚动内容区，
+  // 还会被滚走、盖不住 Stack header —— 历史上就是这样"看起来做了全屏其实没有"。
   assert.ok(
-    viewer.includes('imageFullscreen') && viewer.includes('setImageFullscreen(true)'),
-    'single tap must be able to enter fullscreen',
+    /<Modal[\s\S]{0,400}?visible=\{imageFullscreen/.test(viewer),
+    'fullscreen must use <Modal>, not an absoluteFill View inside <Screen>',
   )
   assert.ok(
-    viewer.includes('setImageFullscreen(false)'),
-    'fullscreen must be exitable',
+    viewer.includes('onRequestClose={() => setImageFullscreen(false)}'),
+    'the fullscreen Modal must handle Android back button via onRequestClose',
+  )
+  assert.ok(
+    viewer.includes('GestureHandlerRootView'),
+    'a Modal hosts its own window; gestures inside it need their own GestureHandlerRootView',
   )
 
-  // 三种手势缺一不可
+  // 手势三件套
   assert.ok(component.includes('Gesture.Pinch()'), 'pinch-to-zoom must be wired')
   assert.ok(component.includes('Gesture.Pan()'), 'panning a zoomed image must be wired')
-  assert.ok(component.includes('Gesture.Tap()'), 'tap gestures must be wired')
-  assert.ok(
-    component.includes('numberOfTaps(2)') && component.includes('numberOfTaps(1)'),
-    'double tap and single tap must both be declared (exclusive, or single fires after double)',
-  )
   assert.ok(
     component.includes('Gesture.Exclusive(doubleTap, singleTap)'),
     'single tap must be exclusive with double tap, otherwise one tap also triggers the double-tap branch',
   )
-  assert.ok(
-    component.includes('runOnJS'),
-    'turning a UI-thread tap into a React state change requires runOnJS',
-  )
 
-  // 手势回调不得自己做魔法数字，必须走纯函数
-  for (const fn of ['clampScale', 'clampTranslation', 'nextDoubleTapScale', 'resolveSingleTap', 'shouldSnapBack']) {
-    assert.ok(lib.includes(`export function ${fn}`), `imageZoom must export ${fn}`)
-    assert.ok(component.includes(fn), `ZoomableImage must delegate to ${fn}`)
+  // 断言必须是「调用点」而不是「函数名出现过」——
+  // 否则 ZoomableImage 顶部那行 import 就能满足断言，实现里删掉调用照样全绿。
+  const callSites = {
+    clampScale: /clampScale\(originScale\.value[^)]*\)/,
+    clampTranslation: /clampTranslation\(originTx\.value[^;]*?\)/,
+    nextDoubleTapScale: /nextDoubleTapScale\(scale\.value\)/,
+    resolveSingleTap: /resolveSingleTap\(scale\.value\)/,
+    shouldSnapBack: /shouldSnapBack\(scale\.value\)/,
+  }
+  for (const [fn, re] of Object.entries(callSites)) {
+    assert.ok(re.test(component), `${fn} must be CALLED in the gesture body (an import is not enough)`)
   }
 
-  console.log(' -> PASSED: Pinch/pan/tap gestures delegate to pure, unit-tested logic.\n')
+  // 平移边界必须用图片真实显示尺寸，拿容器尺寸会把整幅图拖出视野只剩黑底
+  assert.ok(
+    component.includes('contentW.value') && component.includes('contentH.value'),
+    'pan bounds must use the image content size, not the container size',
+  )
+  assert.ok(
+    component.includes('const cw = contentW.value > 0 ? contentW.value : boxW.value'),
+    'horizontal clamp must derive the content width from the image, falling back to the box only before load',
+  )
+  assert.ok(
+    component.includes('clampTranslation(originTx.value + e.translationX, boxW.value, cw, scale.value)'),
+    'horizontal clamp must actually pass cw (a variable named nicely is not enough)',
+  )
+  assert.ok(
+    component.includes('clampTranslation(originTy.value + e.translationY, boxH.value, ch, scale.value)'),
+    'vertical clamp must actually pass ch',
+  )
+
+  console.log(' -> PASSED: Gestures call pure logic at real call sites; fullscreen is a Modal.\n')
+}
+
+function testWorkletDirectives() {
+  console.log('[Test 26] Testing worklet directives on UI-thread helpers...')
+  const lib = fs.readFileSync(path.resolve('src/lib/imageZoom.ts'), 'utf-8')
+
+  // Gesture.onUpdate/onEnd 回调会被 babel 自动 workletize。
+  // 回调里调用普通函数时，UI 线程拿到的是 remote-function guard，一调用就抛
+  // "[Worklets] Tried to synchronously call a Remote Function" —— 手势全废，且 tsc/单测都发现不了。
+  const fns = ['clampScale', 'shouldSnapBack', 'resolveSingleTap', 'nextDoubleTapScale', 'clampTranslation']
+  for (const fn of fns) {
+    const idx = lib.indexOf(`export function ${fn}`)
+    assert.ok(idx >= 0, `${fn} must be exported`)
+    // 必须切到函数真正结束处。固定长度的窗口会跨到下一个函数，
+    // 把相邻函数的 'worklet' 当成自己的，导致删掉指令也照样通过。
+    const rest = lib.slice(idx + 1)
+    const nextExport = rest.indexOf('\nexport ')
+    const body = nextExport >= 0 ? rest.slice(0, nextExport) : rest
+    assert.ok(body.includes("'worklet'"), `${fn} is called from a worklet and MUST carry a 'worklet' directive`)
+  }
+  console.log(' -> PASSED: Every gesture helper is a worklet.\n')
+}
+
+function testPackageVisibility() {
+  console.log('[Test 27] Testing package visibility and install permission...')
+  const modManifest = fs.readFileSync(
+    path.resolve('modules/hermes-keepalive/android/src/main/AndroidManifest.xml'),
+    'utf-8',
+  )
+  const appManifest = fs.readFileSync(path.resolve('android/app/src/main/AndroidManifest.xml'), 'utf-8')
+
+  // targetSdk >= 30：未在 <queries> 声明的包，resolveActivity 恒为 null。
+  // 缺了这段，openFolder 的厂商降级和自启动跳转会在真机上静默失效。
+  assert.ok(modManifest.includes('<queries>'), 'module manifest must declare <queries> for package visibility')
+  for (const pkg of [
+    'com.android.documentsui',
+    'com.miui.securitycenter',
+    'com.huawei.systemmanager',
+    'com.coloros.safecenter',
+    'com.vivo.permissionmanager',
+  ]) {
+    assert.ok(
+      modManifest.includes(`android:name="${pkg}"`),
+      `${pkg} must be visible, otherwise resolveActivity returns null`,
+    )
+  }
+  assert.ok(
+    modManifest.includes('vnd.android.document/directory'),
+    'the VIEW/directory intent must be declared so L1 implicit resolution works',
+  )
+
+  // APK 交给系统安装器需要这个权限，否则 openFile 对 .apk 也只会弹"无法打开"
+  assert.ok(
+    appManifest.includes('REQUEST_INSTALL_PACKAGES'),
+    'REQUEST_INSTALL_PACKAGES is required for targetSdk > 25 to hand an APK to the installer',
+  )
+  console.log(' -> PASSED: Package visibility and install permission declared.\n')
 }
 
 function runAll() {
@@ -870,7 +954,9 @@ function runAll() {
   testKeepAliveForegroundOrdering()
   testVendorRomAdaptation()
   testImageViewerGestures()
-  console.log('=== ALL 24 SUITES PASSED (0 ERRORS) ===')
+  testWorkletDirectives()
+  testPackageVisibility()
+  console.log('=== ALL 26 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

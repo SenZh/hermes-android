@@ -5,6 +5,35 @@
        intent is refused and the app can only send the user to the settings list. -->
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+  <!--
+    Package visibility (targetSdk >= 30). Without these declarations PackageManager.resolveActivity()
+    returns null for every package we probe, which silently kills the whole vendor-ROM adaptation:
+    openFolder's vendor fallback would `continue` past all five file managers, and openAutoStartSettings
+    would always degrade to the app-details screen. Declaring both the explicit packages we probe and
+    the VIEW/directory intent we resolve keeps the fallbacks alive.
+  -->
+  <queries>
+    <package android:name="com.android.documentsui" />
+    <package android:name="com.android.fileexplorer" />
+    <package android:name="com.miui.fileexplorer" />
+    <package android:name="com.huawei.hidisk" />
+    <package android:name="com.coloros.filemanager" />
+    <package android:name="com.vivo.filemanager" />
+    <package android:name="com.miui.securitycenter" />
+    <package android:name="com.huawei.systemmanager" />
+    <package android:name="com.coloros.safecenter" />
+    <package android:name="com.vivo.permissionmanager" />
+    <package android:name="com.samsung.android.sm" />
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:mimeType="vnd.android.document/directory" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:mimeType="*/*" />
+    </intent>
+  </queries>
+
   <application>
     <!-- Keeps the gateway socket alive while the agent works with the app in the background. -->
     <service

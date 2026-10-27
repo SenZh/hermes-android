@@ -1,5 +1,28 @@
 # 更新日志 (Changelog)
 
+## [v1.8.3-preview.24] - 2026-10-27
+
+> preview.23 的图片手势与国产 ROM 适配存在三条真机必崩的死路径，本版全部修复，并由三路独立审查确认。
+
+### 🛠 致命缺陷修复 (Critical)
+
+- **手势一捏就崩**：`imageZoom.ts` 的五个纯函数被 `Gesture.onUpdate/onEnd` 的 worklet 回调直接调用，却没有 `'worklet'` 指令。babel 自动 workletize 后，这些函数在 UI 线程被还原成 remote-function guard，首次捏合即抛 `Tried to synchronously call a Remote Function`，**捏合/拖动/单击/双击全部失效**。已给五个函数补齐指令。
+- **全屏其实没全屏**：原实现用 `<Screen>` 内的 `absoluteFill`，而 `Screen` 默认 `scroll=true`，黑层只覆盖滚动内容区、会被滚走、也盖不住 Stack header，返回键还会直接退出整个 viewer。改用 `Modal` + `statusBarTranslucent` + `onRequestClose`，并给 Modal 内的手势套上独立的 `GestureHandlerRootView`。
+- **国产 ROM 适配在真机上全静默失效**：模块 manifest 缺 `<queries>`，targetSdk≥30 的包可见性过滤让 `resolveActivity` 对所有未声明包恒返回 null——五家厂商文件管理器探测全部 `continue`，自启动永远退到应用详情页。已补 `com.android.documentsui` / 小米 / 华为 / OPPO / vivo / 三星 等包名与两个 VIEW intent。
+- **APK 装不上**：缺 `REQUEST_INSTALL_PACKAGES`，targetSdk>25 下无法把 APK 交给系统安装器。已补。
+- **图片能被拖出屏幕**：平移边界把容器尺寸当成内容尺寸传入，400pt 容器内 16:9 图在 5x 时允许位移 800pt（真实溢出仅 362pt），取满后整幅图移出视野只剩纯黑。改为用 `onLoad` 拿到图片原始尺寸、按 contain 比例算出真实占位后再夹边界。
+- **降级链被提前终止**：`DocumentsUI` 分支用 `EXTRA_INITIAL_URI`，但该 extra 仅对 `OPEN_DOCUMENT*` 生效，`FilesActivity` 只认 `getData()`。结果是打开 Files 首页却报"成功"，把后面的厂商降级整段屏蔽。改为 `data = docUri`。
+- **自启动跳转失败无感知**：`openAutoStartSettings` 降级后仍返回 `true`。改为返回 `'autostart' | 'appdetails' | ''`，UI 据此提示"未识别到本机自启动管理页"。
+
+### 🧪 测试门禁加固
+
+- 删除 Test 1 / Test 2 的**循环自证**（在测试内重写实现再断言副本，改坏生产代码仍全绿）。路径规范化逻辑下沉到 `src/lib/pathNormalize.ts`，新增 10 项真实 import 的单测；Test 1 改为读 `ModelPicker.tsx` 真实源码断言。
+- Test 25 从"函数名出现过"改为断言**真实调用点**——此前 `import` 那一行就能满足断言。
+- 新增 Test 26（五个手势函数必须带 `'worklet'`）、Test 27（`<queries>` 与安装权限必须声明）。
+- Test 24 增加 Activity 类名断言（此前只查包名）、禁止常量短路 `if (true ||`、要求 `continue` 必须是真语句而非注释。
+- **变异验证 13/13 全部拦住**（此前 11 个变异改坏后仍全绿）：删 worklet、全屏退回 absoluteFill、删 queries、平移改回容器尺寸、单击绕过纯函数、探测短路、注释掉 continue、类名写错、层 2 改回 EXTRA_INITIAL_URI、删 MIME_TYPE_DIR、纵向传错尺寸、去掉 Exclusive、filter 改成不过滤。
+
+
 ## [v1.8.3-preview.23] - 2026-10-27
 
 ### ✨ 新增 (Features)

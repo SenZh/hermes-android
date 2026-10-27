@@ -720,6 +720,8 @@ export const zh: Record<string, string> = {
   'Open the system screen and allow Hermes': '打开系统设置页并允许 Hermes',
   'Could not open battery settings': '无法打开电池优化设置',
   'Could not open auto-start settings': '无法打开自启动设置',
+  'No known auto-start screen on this ROM — opening app settings.':
+    '未识别到本机自启动管理页，已跳到应用设置。',
   'Download directory not set.': '未设置下载目录。',
   'Saved folder: {folder}': '保存目录：{folder}',
   'File already exists': '文件已存在',

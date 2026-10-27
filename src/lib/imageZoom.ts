@@ -19,6 +19,7 @@ export const RUBBER_BAND_FLOOR = 0.7
  * 手指离开时用 MIN_SCALE 兜底（不允许停在 1x 以下），过程中用 RUBBER_BAND_FLOOR。
  */
 export function clampScale(next: number, floor: number = RUBBER_BAND_FLOOR): number {
+  'worklet'
   // 只有 NaN 无意义；±Infinity 按上下限处理，否则极限捏合会被误判成归零。
   if (Number.isNaN(next)) return MIN_SCALE
   if (next < floor) return floor
@@ -28,6 +29,7 @@ export function clampScale(next: number, floor: number = RUBBER_BAND_FLOOR): num
 
 /** 松手后是否该回弹到原始大小。 */
 export function shouldSnapBack(scale: number): boolean {
+  'worklet'
   return scale < MIN_SCALE
 }
 
@@ -38,11 +40,13 @@ export function shouldSnapBack(scale: number): boolean {
  * 第一反应是点一下，此时直接退出全屏会很突兀。
  */
 export function resolveSingleTap(scale: number): 'reset' | 'fullscreen' {
+  'worklet'
   return scale > MIN_SCALE + 0.001 ? 'reset' : 'fullscreen'
 }
 
 /** 双击在 1x 与 DOUBLE_TAP_SCALE 之间来回切。 */
 export function nextDoubleTapScale(scale: number): number {
+  'worklet'
   return scale > MIN_SCALE + 0.001 ? MIN_SCALE : DOUBLE_TAP_SCALE
 }
 
@@ -56,6 +60,7 @@ export function clampTranslation(
   contentSize: number,
   scale: number,
 ): number {
+  'worklet'
   if (!Number.isFinite(value) || containerSize <= 0) return 0
   const overflow = (contentSize * scale - containerSize) / 2
   if (overflow <= 0) return 0

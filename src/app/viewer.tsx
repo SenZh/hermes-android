@@ -6,7 +6,8 @@ import { Image } from 'expo-image'
 import * as Linking from 'expo-linking'
 import * as Sharing from 'expo-sharing'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 
 import { Markdown } from '@/components/chat/Markdown'
 import { CheckCircle2, Download, ExternalLink, FileText, FolderOpen, Share2 } from '@/components/icons'
@@ -26,6 +27,7 @@ import {
   type StoredDownloadRecord,
 } from '@/lib/downloadManager'
 import { KeepAlive } from '../../modules/hermes-keepalive'
+import { isManagedPath, normalizeManagedPath } from '@/lib/pathNormalize'
 import { ZoomableImage } from '@/components/ZoomableImage'
 import { radius, space, useTheme } from '@/theme'
 
@@ -43,35 +45,11 @@ export default function DocumentViewerScreen() {
 
   const [allowLargeLoad, setAllowLargeLoad] = useState(false)
 
-  // 1. 标准化路径：
-  let p = rawPath
-    .replace(/^sandbox:\/?\/?/, '')
-    .replace(/^\.\//, '')
-    .trim()
-
-  // 如果以 / 开头，且不是 /opt/data 开头，尝试剥离绝对前缀或判断是否为受管路径
-  if (p.startsWith('/')) {
-    if (p.startsWith('/opt/data/')) {
-      // 已经是合法受管绝对路径，保留
-    } else {
-      // 类似 /output/xxx 或 /workspace/xxx，剥离多余的前缀根斜杠以当作相对路径
-      p = p.replace(/^\//, '')
-    }
-  }
-
-  // 映射 workspace 相对路径到后端受管目录 (后端默认 root 是 /opt/data，而项目在 /opt/data/workspace)
-  let normalized = p
-  if (normalized.startsWith('/opt/data/')) {
-    // 绝对路径原生支持
-  } else if (normalized.startsWith('workspace/')) {
-    normalized = `/opt/data/${normalized}`
-  } else {
-    // 例如 output/test.md 或 src/app.tsx，位于工作区内
-    normalized = `/opt/data/workspace/${normalized}`
-  }
+  // 1. 标准化路径：纯函数在 src/lib/pathNormalize.ts，由单测真实 import 覆盖
+  const normalized = normalizeManagedPath(rawPath)
 
   // 严格沙箱校验：最终解析出的绝对路径必须在 /opt/data 之内
-  const isSystemRestricted = !normalized.startsWith('/opt/data')
+  const isSystemRestricted = !isManagedPath(normalized)
 
   const fileName = normalized ? normalized.split('/').pop() || normalized : ''
 
@@ -615,10 +593,20 @@ export default function DocumentViewerScreen() {
         </View>
       ) : null}
 
-      {/* 全屏图片：单击退出，捏合/双击缩放，放大后拖动 */}
-      {imageFullscreen && q.data ? (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', zIndex: 100 }]}>
-          <ZoomableImage uri={q.data.data_url} background="#000" onSingleTap={() => setImageFullscreen(false)} />
+      {/* 全屏图片：单击退出，捏合/双击缩放，放大后拖动。
+          必须用 Modal —— <Screen> 默认 scroll=true，absoluteFill 只会覆盖滚动内容区，
+          还会被滚走、header 也盖不住，等于没全屏。 */}
+      <Modal
+        visible={imageFullscreen && !!q.data}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setImageFullscreen(false)}
+      >
+        <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
+          {q.data ? (
+            <ZoomableImage uri={q.data.data_url} background="#000" onSingleTap={() => setImageFullscreen(false)} />
+          ) : null}
           <Pressable
             onPress={() => setImageFullscreen(false)}
             hitSlop={12}
@@ -626,8 +614,8 @@ export default function DocumentViewerScreen() {
           >
             <Text style={{ color: '#fff', fontSize: 15 }}>{t('Done')}</Text>
           </Pressable>
-        </View>
-      ) : null}
+        </GestureHandlerRootView>
+      </Modal>
     </Screen>
   )
 }

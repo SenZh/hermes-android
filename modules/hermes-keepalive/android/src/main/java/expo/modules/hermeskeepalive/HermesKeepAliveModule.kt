@@ -177,10 +177,13 @@ class HermesKeepAliveModule : Module() {
         })
       ) return@Function true
 
-      // L2: explicit DocumentsUI, still present on most AOSP-derived ROMs.
+      // L2: explicit DocumentsUI. FilesActivity reads the landing folder from getData(),
+      // NOT from EXTRA_INITIAL_URI — that extra only applies to OPEN_DOCUMENT* actions.
+      // Passing it here would open the Files home page while still reporting success,
+      // which would short-circuit the vendor fallbacks below.
       if (attempt(Intent(Intent.ACTION_VIEW).apply {
           component = ComponentName("com.android.documentsui", "com.android.documentsui.files.FilesActivity")
-          putExtra(DocumentsContract.EXTRA_INITIAL_URI, docUri)
+          data = docUri
           addFlags(flags)
         })
       ) return@Function true
@@ -286,11 +289,19 @@ class HermesKeepAliveModule : Module() {
         intent.data = Uri.fromParts("package", context.packageName, null)
       }
 
-      try {
+      val opened = try {
         context.startActivity(intent)
         true
       } catch (_: Exception) {
         false
+      }
+
+      // Distinguish "landed on the vendor auto-start page" from "fell back to app details",
+      // otherwise the UI cannot tell the user that the ROM has no known auto-start screen.
+      when {
+        !opened -> ""
+        resolvable -> "autostart"
+        else -> "appdetails"
       }
     }
   }

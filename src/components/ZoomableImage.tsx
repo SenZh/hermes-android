@@ -28,6 +28,9 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: 
   const originTy = useSharedValue(0)
   const boxW = useSharedValue(0)
   const boxH = useSharedValue(0)
+  /** 图片在 contain 模式下实际占据的尺寸，用于平移边界。用容器尺寸替代会把图片拖出屏幕。 */
+  const contentW = useSharedValue(0)
+  const contentH = useSharedValue(0)
 
   const toOrigin = () => {
     'worklet'
@@ -54,8 +57,12 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
       if (scale.value <= MIN_SCALE) return
-      tx.value = clampTranslation(originTx.value + e.translationX, boxW.value, boxW.value, scale.value)
-      ty.value = clampTranslation(originTy.value + e.translationY, boxH.value, boxH.value, scale.value)
+      // 内容尺寸取图片 contain 后的真实显示尺寸；拿容器尺寸会让边界大出一截，
+      // 取满时整幅图移出视野只剩黑底。
+      const cw = contentW.value > 0 ? contentW.value : boxW.value
+      const ch = contentH.value > 0 ? contentH.value : boxH.value
+      tx.value = clampTranslation(originTx.value + e.translationX, boxW.value, cw, scale.value)
+      ty.value = clampTranslation(originTy.value + e.translationY, boxH.value, ch, scale.value)
     })
     .onEnd(() => {
       originTx.value = tx.value
@@ -102,7 +109,20 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent' }: 
           boxH.value = e.nativeEvent.layout.height
         }}
       >
-        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
+        <Image
+          source={{ uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="contain"
+          transition={120}
+          onLoad={(e) => {
+            // contain：按较小比例缩放，图片完整可见。算出真实占位后平移边界才准。
+            const { width, height } = e.source
+            if (!width || !height || boxW.value <= 0 || boxH.value <= 0) return
+            const fit = Math.min(boxW.value / width, boxH.value / height)
+            contentW.value = width * fit
+            contentH.value = height * fit
+          }}
+        />
       </Animated.View>
     </GestureDetector>
   )

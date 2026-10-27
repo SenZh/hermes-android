@@ -18,7 +18,8 @@ interface HermesKeepAliveModule {
   openFolder(dirUri: string): boolean
   batteryOptimizationIgnored(): boolean
   requestBatteryExemption(): boolean
-  openAutoStartSettings(): boolean
+  /** 'autostart' = vendor page opened, 'appdetails' = degraded, '' = nothing opened. */
+  openAutoStartSettings(): string
 }
 
 // Android only; elsewhere (web, Expo Go) every call is a no-op.
@@ -41,7 +42,8 @@ export const KeepAlive = {
   /** Ask the system for the Doze whitelist. */
   requestBatteryExemption: () => native?.requestBatteryExemption() ?? false,
   /** Jump to the vendor's auto-start screen (Xiaomi/Huawei/OPPO/vivo/…); no read API exists. */
-  openAutoStartSettings: () => native?.openAutoStartSettings() ?? false,
+  openAutoStartSettings: (): 'autostart' | 'appdetails' | '' =>
+    (native?.openAutoStartSettings() as 'autostart' | 'appdetails' | '') ?? '',
 }
 
 /** Report of the last unexpected exit; null when absent, already seen, or unsupported. */

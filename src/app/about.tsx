@@ -92,7 +92,10 @@ export default function AboutScreen() {
             title={t('Auto-start')}
             subtitle={t('Open the system screen and allow Hermes')}
             onPress={() => {
-              if (!KeepAlive.openAutoStartSettings()) {
+              const result = KeepAlive.openAutoStartSettings()
+              if (result === 'appdetails') {
+                toast(t('No known auto-start screen on this ROM — opening app settings.'), 'info')
+              } else if (result === '') {
                 toast(t('Could not open auto-start settings'), 'info')
               }
             }}
