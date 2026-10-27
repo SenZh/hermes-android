@@ -7,7 +7,7 @@ import { useT } from '@/i18n'
 import type { ModelOptionsResult } from '@/lib/gateway/contract.generated'
 import { haptic } from '@/lib/haptics'
 import { rpc } from '@/lib/hermes'
-import { effortsFor, type Effort } from '@/lib/reasoning'
+import { effortLabel, effortsFor, type Effort } from '@/lib/reasoning'
 import { radius, space, useTheme } from '@/theme'
 
 interface Props {
@@ -33,15 +33,6 @@ export function ReasoningSheet({ visible, onClose, sessionId, model, provider, e
   })
   const row = options.data?.providers.find((p) => p.slug === provider) ?? options.data?.providers.find((p) => p.is_current)
   const levels = effortsFor(provider ?? row?.slug, model, model ? row?.capabilities?.[model] : undefined)
-  const labels: Record<Effort, string> = {
-    none: t('Off'),
-    minimal: t('Minimal'),
-    low: t('Low'),
-    medium: t('Medium'),
-    high: t('High'),
-    xhigh: t('Extra high'),
-    max: t('Max'),
-  }
   return (
     <Sheet visible={visible} onClose={onClose} title={t('Reasoning effort')}>
       <Text tone="muted" variant="small">
@@ -68,7 +59,7 @@ export function ReasoningSheet({ visible, onClose, sessionId, model, provider, e
                 style={[styles.option, { backgroundColor: on ? c.accentSoft : c.surfaceAlt }]}
               >
                 <Text weight={on ? 'semibold' : 'regular'} style={{ flex: 1 }}>
-                  {labels[level]}
+                  {effortLabel(level, t)}
                 </Text>
                 {on ? <Check size={18} color={c.accentText} /> : null}
               </Pressable>
