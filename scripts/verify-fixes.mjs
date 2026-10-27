@@ -948,11 +948,16 @@ function testGestureRobustness() {
   )
 
   // 内嵌预览的 Pan 会和页面纵向滚动抢手势
+  // 图片页改成不滚动（Screen scroll={!isImageFile}），所以 pan 不会再抢滚动，
+  // 内嵌也放开拖动；取而代之要锁住「图片页不滚动」这个前提。
   assert.ok(
-    viewer.includes('enablePan={false}'),
-    'inline preview must disable pan so vertical page scroll still works',
+    viewer.includes('<Screen scroll={!isImageFile}>'),
+    'image pages must not scroll, otherwise flex-filling the image and pan both break',
   )
-  assert.ok(component.includes('.enabled(enablePan)'), 'pan must honour the enablePan switch')
+  assert.ok(
+    component.includes('.maxPointers(1)'),
+    'pan must be single-finger, otherwise it competes with pinch and the zoom jitters',
+  )
 
   // 缩小时可移动范围同步收缩，旧偏移必须重夹，否则图片停在屏幕外
   assert.ok(

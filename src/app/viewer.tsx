@@ -69,6 +69,7 @@ export default function DocumentViewerScreen() {
   )
 
   const mime = q.data?.mime_type ?? ''
+  const isImageFile = mime.startsWith('image/')
   const b64 = q.data?.data_url ? q.data.data_url.slice(q.data.data_url.indexOf(',') + 1) : ''
   const fileSize = q.data?.size ?? 0
   const isLarge = fileSize > 5 * 1024 * 1024
@@ -380,7 +381,7 @@ export default function DocumentViewerScreen() {
   }
 
   return (
-    <Screen>
+    <Screen scroll={!isImageFile}>
       <Stack.Screen
         options={{
           title: fileName || t('Document'),
@@ -565,8 +566,17 @@ export default function DocumentViewerScreen() {
       {q.error ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : null}
 
       {mime.startsWith('image/') && q.data ? (
-        <View style={{ width: '100%', aspectRatio: 1, borderRadius: radius.md, overflow: 'hidden' }}>
-          <ZoomableImage uri={q.data.data_url} enablePan={false} onSingleTap={() => setImageFullscreen(true)} />
+        <View
+          style={{
+            flex: 1,
+            minHeight: 240,
+            width: '100%',
+            borderRadius: radius.md,
+            overflow: 'hidden',
+            backgroundColor: c.surface,
+          }}
+        >
+          <ZoomableImage uri={q.data.data_url} onSingleTap={() => setImageFullscreen(true)} />
         </View>
       ) : null}
 

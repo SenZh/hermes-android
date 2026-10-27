@@ -72,6 +72,8 @@ export function ZoomableImage({ uri, onSingleTap, background = 'transparent', en
 
   const pan = Gesture.Pan()
     .enabled(enablePan)
+    // 双指捏合时 pan 也会激活，抢走事件导致缩放抖动；只允许单指拖动
+    .maxPointers(1)
     .onUpdate((e) => {
       if (scale.value <= 1) return
       // 内容尺寸取图片 contain 后的真实显示尺寸；拿容器尺寸会让边界大出一截，
