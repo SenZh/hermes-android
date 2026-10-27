@@ -57,3 +57,14 @@
 - 断言前先 `stripComments`（块注释 → 行注释 → KDoc 续行三层）。
 - 反向约束（"不得出现某调用"）比正向包含更有鉴别力，优先写反向。
 - 断言里的关键调用要带前缀（`ServiceCompat.startForeground` 而不是 `startForeground`）。
+
+## 2026-10-27 图片手势查看器
+
+- **worklet 内不能引用模块级标识符**，包括参数默认值。真机 `Property 'RUBBER_BAND_FLOOR' doesn't exist` 首次触摸即 crash。babel 只捕获函数体里引用的自由变量。改字面量 + 运行时反查一致性。
+- **`android/` 整目录在 .gitignore**，`build.gradle` 的 versionCode / `AndroidManifest.xml` 的权限都是 prebuild 产物。改那里等于没改，必须改 `app.json`。此前 versionCode 长期停在 13。
+- **门禁不能读 prebuild 产物**：CI 的 check job 跑在 prebuild 之前，读 `android/app/...` 必 ENOENT。要模拟 CI 就是先把 `android/` 移走再跑测试。
+- **静态断言要断言调用点，不是名字出现过**：`component.includes('clampTranslation')` 会被顶部 import 满足。变异测试 16 个里曾有 11 个改坏仍全绿。
+- **`<Screen>` 默认 scroll=true**，子节点上的 `absoluteFill` 只能覆盖滚动内容区，做全屏必须用 `Modal`。
+- **图片满屏**：容器写 `aspectRatio: 1` 会把任何图塞进正方形，宽图上下留白。要 `flex: 1` + `contentFit="contain"`，并让页面本身不滚动。
+- **双指捏合时 `pan` 会一起激活**，抢事件导致缩放抖动。`pan` 要加 `.maxPointers(1)`。
+- **发布纪律**：内测包只在本地流转，不得创建 GitHub Release 或推 tag；GitHub 上只允许纯三位正式版。
