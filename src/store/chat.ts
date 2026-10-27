@@ -4,6 +4,7 @@ import { dismissToast, toast } from '@/components/ui/Dialogs'
 import { t } from '@/i18n'
 import { dropKnownRows, foldHistory, isToolError, type SessionMessageRow } from '@/lib/chat/history'
 import { withMediaCapabilityPrompt } from '@/lib/mediaPrompt'
+import { resolveWorkspaceInfo } from '@/lib/workspacePath'
 import {
   localId,
   type ChatMessage,
@@ -973,7 +974,12 @@ async function sendTo(rid: string, text: string, mode: SendMode, opts: { display
   // 新会话首轮带上客户端能力说明：走 api_text（模型可见、用户不可见），
   // 教会模型用 MEDIA:/abs/path 交付文件。后续轮次不重复注入。
   const isFirstTurn = opts.editRowId == null && !s.messages.some((m) => m.role === 'user')
-  const apiText = withMediaCapabilityPrompt(prompt, isFirstTurn)
+  let apiText = prompt
+  if (isFirstTurn) {
+    // 工作区路径由服务端给，客户端不猜；拿不到就让模型自己确认（提示词里有这条规则）
+    const ws = await resolveWorkspaceInfo((path) => hermes().rest.get(path))
+    apiText = withMediaCapabilityPrompt(prompt, true, ws.defaultCwd)
+  }
 
   if (mode === 'steer' || mode === 'redirect') {
     const res = await gw.request(mode === 'steer' ? 'session.steer' : 'session.redirect', { session_id: rid, text: prompt })

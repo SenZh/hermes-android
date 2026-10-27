@@ -1099,9 +1099,40 @@ function testMediaCapabilityInjection() {
   for (const required of ['MEDIA:/服务端绝对路径', 'base64', '用户看不到', '绝对路径']) {
     assert.ok(media.includes(required), `capability prompt must mention ${required}`)
   }
+  // 路径前缀一律不许写死：不同部署的 workspace 完全不同
+  for (const bad of ['/opt/data', '/home/', 'C:\\']) {
+    assert.ok(
+      !media.includes(bad),
+      `capability prompt must not hardcode ${bad} — the workspace path differs per deployment`,
+    )
+  }
   assert.ok(
-    !/MEDIA_CAPABILITY_PROMPT\s*=\s*`[\s\S]*?inline/.test(media),
-    'sanity: prompt should not encourage inlining file contents',
+    media.includes('不要假设前缀'),
+    'the prompt must tell the model to verify the prefix instead of assuming one',
+  )
+
+  // 真实工作区由服务端给，客户端只负责取
+  const ws = fs.readFileSync(path.resolve('src/lib/workspacePath.ts'), 'utf-8')
+  assert.ok(ws.includes('/api/chat/workspaces'), 'workspace cwd must come from the server endpoint')
+  assert.ok(
+    ws.includes('default_cwd'),
+    'the response field is default_cwd; hardcoding a fallback path would be the same bug again',
+  )
+  {
+    // 注释里举例子可以，代码里出现才是硬编码
+    const wsCode = ws.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    assert.ok(
+      !/\/opt\/data|\/home\/|[A-Z]:\\\\/.test(wsCode),
+      'workspacePath must not hardcode an absolute path in code',
+    )
+  }
+  assert.ok(
+    /const ws = await resolveWorkspaceInfo\(\(path\) => hermes\(\)\.rest\.get\(path\)\)/.test(chat),
+    'chat store must fetch the real workspace before composing the prompt',
+  )
+  assert.ok(
+    /withMediaCapabilityPrompt\(prompt, true, ws\.defaultCwd\)/.test(chat),
+    'the real defaultCwd must be passed through, not a literal',
   )
 
   console.log(' -> PASSED: Capability prompt is injected once, via api_text, without leaking to the user.\n')

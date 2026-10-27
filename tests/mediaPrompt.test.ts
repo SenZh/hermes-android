@@ -40,4 +40,33 @@ describe('MediaPrompt: 提示词内容', () => {
       expect(MEDIA_CAPABILITY_PROMPT).toContain(kind)
     }
   })
+
+  it('[TC-MEDIA-08] 提示词里不得硬编码任何路径前缀', () => {
+    // 写死 /opt/data 或 /home 之类，换个部署就指向不存在的目录
+    for (const bad of ['/opt/data', '/home/', 'C:\\', '~/.']) {
+      expect(MEDIA_CAPABILITY_PROMPT.includes(bad)).toBe(false)
+    }
+    expect(MEDIA_CAPABILITY_PROMPT).toContain('不要假设前缀')
+  })
+})
+
+describe('MediaPrompt: 工作区路径来自服务端', () => {
+  it('[TC-MEDIA-09] 传入真实 cwd 时示例使用它', () => {
+    const out = withMediaCapabilityPrompt('hi', true, '/srv/agent/workspace')
+    expect(out).toContain('/srv/agent/workspace/reports/notes.md')
+    expect(out).toContain('当前会话工作区是 /srv/agent/workspace')
+  })
+
+  it('[TC-MEDIA-10] 拿不到 cwd 时不给示例，绝不编造路径', () => {
+    const out = withMediaCapabilityPrompt('hi', true, null)
+    expect(out.includes('/opt/data')).toBe(false)
+    expect(out.includes('reports/notes.md')).toBe(false)
+    expect(out).toContain('不要假设前缀')
+  })
+
+  it('[TC-MEDIA-11] 尾部斜杠不会拼出双斜杠', () => {
+    const out = withMediaCapabilityPrompt('hi', true, '/srv/ws/')
+    expect(out).toContain('MEDIA:/srv/ws/reports/notes.md')
+    expect(out.includes('//reports')).toBe(false)
+  })
 })
