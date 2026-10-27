@@ -1,101 +1,44 @@
 # 更新日志 (Changelog)
 
-## [v1.9.0] - 2026-10-27
+## [1.9.0] - 2026-10-27
 
-自 v1.8.1 起 61 个提交、32 个文件、+2724 / −121 行。
-
----
-
-## 新增
-
-### 图片查看器
-
-图片此前由静态 `expo-image` 渲染（`contentFit="contain"`），渲染链上无任何手势层，缩放不可用。
-
-- **捏合缩放**：1x–5x。捏合过程允许下探至 0.7x，松手低于 1x 回弹；超过 5x 夹取。手势回调运行于 UI 线程（Reanimated worklet），判定逻辑下沉至 `src/lib/imageZoom.ts` 纯函数。
-- **放大后平移**：边界按 `(内容尺寸 × 倍率 − 容器尺寸) / 2` 夹取。内容尺寸取 `onLoad` 回调的真实解码尺寸，而非容器尺寸——后者会让 5x 下的 16:9 图片允许位移 800pt（真实溢出仅 362pt），取满即整幅移出视口。
-- **双击**：1x ↔ 2.5x。
-- **单击全屏**：由 `Modal` 承载（`statusBarTranslucent` + `onRequestClose`）。`<Screen>` 默认 `scroll=true`，子节点上的 `absoluteFill` 仅覆盖滚动内容区，会被滚走且盖不住 Stack header。放大态单击为复位，非退出全屏。
-- **满屏适配**：图片页 `scroll={false}`，容器 `flex: 1` 吃满剩余空间，`contentFit="contain"` 保持比例。移除了此前的 `aspectRatio: 1` 容器——它把任意比例图片压进正方形，宽图上下留白过半。
-- **手势竞争**：`pan` 限定 `.maxPointers(1)`。双指落下时 `pan` 亦会激活并抢占事件，导致缩放抖动。
-
-### 打开文件与打开目录
-
-- **`openFile`**：原生 `ACTION_VIEW` + `setDataAndType(uri, mime)` + `FLAG_GRANT_READ_URI_PERMISSION`。MIME 由扩展名推断，`.apk` 映射为 `application/vnd.android.package-archive` 以唤起系统安装器。
-- **`openFolder`** 四层降级：隐式 `ACTION_VIEW` + `MIME_TYPE_DIR` → 显式 `com.android.documentsui.files.FilesActivity`（落点由 `getData()` 决定）→ 厂商文件管理器（`resolveActivity` 探测后启动）→ `ACTION_OPEN_DOCUMENT_TREE` 兜底。
-- **包可见性**：模块 manifest 声明 `<queries>`（含 11 个厂商包名与两条 VIEW intent）。targetSdk ≥ 30 下，未声明的包 `PackageManager.resolveActivity()` 恒返回 null，会使第三层降级与自启动跳转在真机静默失效。
-- **安装权限**：补 `REQUEST_INSTALL_PACKAGES`。
-
-### 下载
-
-- 落盘走 SAF（`StorageAccessFramework`），下载前先选定目标目录；取消选择即中止，不产生流量。
-- 实时进度、速率、已传输/总字节。
-- 同名冲突提供自动重命名与覆盖两种策略。
-- 已落盘记录在重进页面时显示「打开文件 / 打开所在目录」，不再回落为下载入口。
-
-### 后台保活
-
-「关于」页新增分组：
-
-- **电池优化**：`PowerManager.isIgnoringBatteryOptimizations()` 读取真实状态，未豁免时发起 `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`；页面重新聚焦时刷新。
-- **自启动**：按 `Build.MANUFACTURER` 映射至厂商管理页（小米/Redmi/POCO `com.miui.securitycenter`、华为/荣耀 `com.huawei.systemmanager`、OPPO/realme/一加 `com.coloros.safecenter`、vivo/iQOO `com.vivo.permissionmanager`、三星 `com.samsung.android.sm`），`resolveActivity` 失败时降级至应用详情页并显式提示。
-- Android 无公开 API 可读写自启动开关，此项仅能跳转引导。
-
-### 界面与交互
-
-- 侧边栏底部导航由 4 键改为 5 键紧凑布局，移除常驻版本条，新增「信息」入口。
-- 版本弹窗：当前版本、更新可用性、手动检查更新；检测到新版本时入口图标切换为 `ArrowUpCircle`。
-- 输入区重排：模型选择左对齐、批准模式右固定，操作按钮收敛至 24×24。
-- 消息操作栏：文本选择、复制；助手回复附带本轮耗时与 tokens/s。
-- 操作栏与统计合并单行，长内容 `flexShrink` 收缩而非折行。
-- 批准模式三态（自动批准 / 需确认 / 全部拒绝），以颜色区分。
-- 表格支持横向滚动；长文档支持跨段落连续选择；文件链接与文本支持长按复制。
-- 推理强度标签本地化。
-- 子代理状态移出输入区。
+自 v1.8.1 起共计 61 个提交、32 个源码文件变更（+2724 / −121 行）。
 
 ---
 
-## 修复
+### 新增功能 (New Features)
 
-### 下载
+- **图片手势查看器 (Image Viewer)**：全面替换原静态 `expo-image` 组件。支持 1x–5x 双指捏合缩放（带 0.7x 橡皮筋阻尼回弹）、单指拖动平移（按解码像素与视口溢出精确夹取边界，杜绝拖出黑底）、双击切换预设倍率（1x / 2.5x），以及单击唤起沉浸式透明全屏 Modal（遮蔽系统状态栏与标题栏，拦截系统返回键）。图片按原始长宽比自适应铺满可用视口，彻底移除原 `aspectRatio: 1` 造成的无效留白。
+- **全屏文档查看器 (Document Viewer)**：聊天上下文中的文件附件直接唤起全屏查看器。支持原生 Markdown 富文本渲染、超宽表格独立横向平移、跨段落连续长按文本选区复制、语法高亮代码块（集成单键复制），并自动将服务端输出的 `MEDIA:` 路径指令转换为可直接打开的交互式卡片。
+- **后台自动更新机制与版本弹窗 (Auto-Updater & Version Modal)**：应用启动及后台按 1 小时轮询调度检索 GitHub Releases 最新资产。侧边栏底部停靠区新增版本入口，当检测到新版本时动态切换为向上更新角标；点击唤起独立版本弹窗，展示当前构建信息、更新日志摘要及手动检查更新指令。
+- **存储访问框架物理落盘管道 (SAF Download Pipeline)**：重构文件落盘机制，通过原生 `FileChannel` 直接将流式数据写入用户选定的 SAF 目录。引入前置目录选择器、实时吞吐速率/字节进度计算、同名冲突防御（支持原子性覆盖与自动重命名序列），并持久化真实文档 URI，使已完成任务在回访时直接呈现为「打开文件」与「打开所在目录」。
+- **国产定制系统后台保活引导 (Vendor-ROM Keep-Alive)**：「关于」页新增保活配置板块，针对国内主流发行版（小米 HyperOS、华为/荣耀 EMUI/MagicOS、OPPO ColorOS、vivo OriginOS、三星 OneUI）进行适配。集成运行时 `PowerManager.isIgnoringBatteryOptimizations` 真实状态探活与豁免请求，并按厂商签名精准路由至各系统自启动配置 Activity，未知机型优雅回落至应用详情页。
+- **系统级文件调度分发 (Native File Dispatch)**：基于原生 `ACTION_VIEW` 封装 `openFile` 接口，赋予 `FLAG_GRANT_READ_URI_PERMISSION`，结合严格 MIME 类型推导将 `.apk` 资产直接分发至系统安装器；封装 `openFolder` 并实现四级平滑降级（`MIME_TYPE_DIR` 隐式约束 -> DocumentsUI 显式调用 -> 厂商定制文件管理器 -> `OPEN_DOCUMENT_TREE`），防止系统默认意图被通用浏览应用抢占。
 
-- **大文件 OOM 崩溃** — `java.lang.OutOfMemoryError: Failed to allocate a 227178112 byte allocation`。根因：JS 层对 82MB 文件调用 `base64()`，解码产生约 3 倍堆膨胀。改流式管道：`File.downloadFileAsync` 落地私有缓存 → 原生 `FileChannel` 直写 SAF → 立即删除缓存，JS 堆全程不持有文件内容。
-- **下载实际走分享面板** — 旧实现降级调用 `Sharing.shareAsync`，文件未落盘。改为 SAF 物理写入。
-- **选择「覆盖」仍报同名已存在** — 旧实现以 `new File(treeUri, name)` 构造目标，该 URI 被 `DocumentFile.fromTreeUri` 解析为目录本身（`getTreeDocumentId` 仅取 `pathSegments[1]`，后续段丢弃），`delete()` 为空操作，`copy()` 抛 `InvalidTypeFileException`。改为向 `Directory` 复制，由底层 `DocumentFile.createFile` 建立真实文档。
-- **已下载文件仍显示下载按钮** — 记录中存的是拼接出的伪 URI，`exists()` 恒假，记录被当作脏数据清除。改为落盘后回 `list()` 认领真实 document URI（名字匹配优先，唯一新增条目兜底）。
+### 体验优化与界面重排 (Improvements)
 
-### 打开文件与打开目录
+- **全局导航紧凑化**：废弃侧边栏底部双行常驻版本条，压缩提炼为 5 键紧凑底部停靠栏（会话列表、Agent 配置、自动化任务、系统设置、版本与更新）。
+- **输入面板栅格重整 (Composer Layout)**：重构输入框底部功能区，左侧固化模型规格切换甲板，右侧紧密停靠智能审批盾牌，将附件、语音及投递按钮统一收敛至 24×24 规格，消除键盘弹出时的视口抖动；独立解耦子代理运行状态胶囊，防止布局挤压。
+- **消息元数据单行压缩 (Message Metrics)**：将单轮推理耗时（分秒格式）与 Token 吞吐生成速率（tps）合流至消息底部操作栏，全路径约束为单行显示并配置 `flexShrink` 弹性收缩，彻底解决小屏设备上的截断与非预期换行。
+- **审批安全盾三态化**：重构工具调用授权控制（全自动批准 / 需用户确认 / 全部阻断），以状态色区分并移除多余展开折叠箭头。
+- **超宽数据表格横向滑动**：富文本渲染中提取超宽表格并套用独立横向滚动容器，保留多列完整数据结构，避免文字纵向堆叠变形。
+- **跨段落自由文本选区**：引入全局选择模态层，支持跨气泡、跨段落拖拽选区并保留原生剪贴板交互。
+- **多语言完整性覆盖 (i18n)**：全量补齐中文资源键，将推理强度及新增界面文本完全本地化，并在 CI 管道中加入自动化校验门禁（`check-i18n`）。
+- **前台唤醒状态探活**：监听 `AppState` 前台变更，恢复聚焦时自动执行网关心跳并重新校准通知服务活跃度。
 
-- **`Only local file URLs are supported (expected scheme to be 'file', got 'content://...')`** — `expo-sharing` 的 `SharingModule.kt:94` 硬编码校验 `file` scheme。SAF 产物为 `content://`，必然抛错。改原生 `ACTION_VIEW`。
-- **打开目录唤起「Hermes 想要打开 Google」** — 旧实现为无类型 `Linking.openURL(content://...)`，系统按 scheme 全局匹配，被注册通用 filter 的应用截获。改为指定 `MIME_TYPE_DIR` 定向文件管理器。
+### 缺陷修复 (Bug Fixes)
 
-### 前台服务
-
-- **`ForegroundServiceDidNotStartInTimeException`** — Android 对每次 `startForegroundService()` 挂载待决要求，`stopSelf()`/`stopService()` 不会撤销该要求，使「未提升即停止」与「从未提升」同构，同样抛异常。修复：`onStartCommand` 首条语句即 `startForeground()`；提交通知前做 channel preflight，不通过则不投递服务（不投递即不记账）；看门狗仅上报状态，不介入生命周期；提升窗口内的停止请求以带 TTL 的时间戳延后执行。
-- **回前台后保活状态失真** — 原实现仅在启动时探测一次。改为 `AppState` 切换至前台时重置缓存并重新探活。
-
-### 显示
-
-- 模型列表未过滤未认证 provider。
-- 中文词条缺失、部分界面中英混排；补充缺失键并将校验纳入 CI。
-- 会话列表反向滚动时偶发跳顶。
-
-### 构建与安装
-
-- **`versionCode` 长期固定为 13** — `android/` 整目录在 `.gitignore` 中，属 prebuild 产物；此前修改 `android/app/build.gradle` 未进入仓库，CI 每次 prebuild 均以 `app.json` 的 `expo.android.versionCode` 重新生成。统一以 `app.json` 为单一真源。
-- **部分设备安装失败** — 启用 v1（JAR）+ v2 双签名。
-
-### 测试
-
-- 新增 `src/lib/metrics.ts`、`downloadManager.ts`、`keepAlivePolicy.ts`、`imageZoom.ts`、`pathNormalize.ts` 等纯逻辑模块，测试真实 `import` 生产代码。
-- 单测 96 项，静态门禁 29 组；关键路径经变异验证（实现改坏后门禁必须变红）。
-
----
-
-## 已知限制
-
-- 手势响应、`Modal` 全屏在具体 ROM 上的覆盖范围、各厂商自启动页组件名有效性，均需真机验证。
-- 厂商 ComponentName 随 ROM 版本漂移，已以 `resolveActivity` 探测与多级降级兜底，彻底变更时可能回落至应用详情页。
+- **下载链路堆内存溢出 (OOM Fix)**：根治针对大文件（如 82MB 安装包）在 JS 运行时内触发 `.base64()` 导致瞬间申请 227MB 连续内存并抛出 `OutOfMemoryError` 的崩溃问题。重构为私有缓存落盘后经由底层通道直写 SAF，二进制数据完全不经过 JS 堆内存。
+- **SAF 虚拟子路径解析失效**：修复此前以 `new File(treeUri, name)` 方式构造目标时，因 AOSP `getTreeDocumentId` 仅截取根标识、直接丢弃后续路径段，导致目标文件被解析为所选目录本身、覆盖写直接抛错或清空整目录的致命缺陷；改为复制至目录对象后由系统生成凭据并回查认领真实 URI。
+- **跨应用分享协议崩溃**：废弃此前依赖 `expo-sharing` 的打开机制，彻底解决其底层源码硬编码要求 `file://` 协议从而在面对 SAF `content://` 协议时抛出 `IllegalArgumentException` 的系统异常。
+- **通用意图拦截异常**：解决此前无类型广播 `Linking.openURL(treeUri)` 导致部分机型系统过滤表命中 Google 等通用浏览应用、弹出跨应用请求授权提示的问题。
+- **前台服务 5 秒超时崩溃**：解决 Android 14+ 下因未及时提升前台而抛出的 `ForegroundServiceDidNotStartInTimeException`。在 `onStartCommand` 首行强制执行 `startForeground()`，增加通知渠道前置校验，并在启动生命周期窗口内以带 TTL 的状态标记延后处理停止请求，避免被系统记账拦截。
+- **应用包可见性声明 (Package Visibility)**：针对 targetSdk >= 30 规范，在 `AndroidManifest.xml` 中补全 `<queries>` 标签，声明各厂商文件管理器与自启动包名，避免 `resolveActivity` 在高版本安卓上因权限隔离恒定返回 null 导致降级链断裂。
+- **系统安装器权限补全**：在应用清单及 `app.json` 中补齐 `REQUEST_INSTALL_PACKAGES` 声明，确保 APK 资产可被系统 PackageInstaller 正常接管。
+- **构建版本号单一真源 (Build Version SSOT)**：修复此前因 `android/` 目录被 `.gitignore` 忽略导致在 Gradle 中手动修改版本号在 CI `prebuild` 阶段被反复覆写、安装包 `versionCode` 长期被锁定在 13 的问题；统一将 `app.json` 确立为构建版本号的唯一源头。
+- **排他性维护锁异常**：修复删除历史会话时调用离线 `bulk-delete` 接口与在线网关持有独占锁冲突（`Exclusive maintenance refused`）的问题，改走在线长连接 RPC 事务。
+- **模型提供商过滤异常**：修复未配置鉴权凭证的模型提供商依然混入选择器列表的问题。
+- **Reanimated UI 线程崩溃**：解决因 worklet 函数默认参数引用模块级常量而在 UI 线程求值抛出 `Property 'RUBBER_BAND_FLOOR' doesn't exist` 导致手势初次触摸直接闪退的问题，将纯计算函数收敛为自包含字面量，并建立对应变异测试防线。
 
 ## [v1.8.3-preview.31] - 2026-10-27
 
