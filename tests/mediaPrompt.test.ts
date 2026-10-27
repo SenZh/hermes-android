@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MEDIA_CAPABILITY_PROMPT, withMediaCapabilityPrompt } from '@/lib/mediaPrompt'
+import { CAPABILITY_MARKER, MEDIA_CAPABILITY_PROMPT, stripCapability, withMediaCapabilityPrompt } from '@/lib/mediaPrompt'
 
 describe('MediaPrompt: 注入时机', () => {
   it('[TC-MEDIA-01] 首轮追加能力说明', () => {
@@ -68,5 +68,27 @@ describe('MediaPrompt: 工作区路径来自服务端', () => {
     const out = withMediaCapabilityPrompt('hi', true, '/srv/ws/')
     expect(out).toContain('MEDIA:/srv/ws/reports/notes.md')
     expect(out.includes('//reports')).toBe(false)
+  })
+})
+
+describe('MediaPrompt: 渲染剥离', () => {
+  it('[TC-MEDIA-12] 用户文本拼上能力说明后，剥离回来只剩原文', () => {
+    const sent = withMediaCapabilityPrompt('写个文件给我', true, '/srv/ws')
+    expect(sent).toContain(CAPABILITY_MARKER)
+    expect(stripCapability(sent)).toBe('写个文件给我')
+  })
+
+  it('[TC-MEDIA-13] 没有标记的文本原样返回，不会误伤正常对话', () => {
+    expect(stripCapability('普通消息')).toBe('普通消息')
+    expect(stripCapability('')).toBe('')
+  })
+
+  it('[TC-MEDIA-14] 剥离是幂等的（本地气泡与历史加载各剥一次）', () => {
+    const once = stripCapability(withMediaCapabilityPrompt('hi', true, null))
+    expect(stripCapability(once)).toBe(once)
+  })
+
+  it('[TC-MEDIA-15] 非首轮不带标记', () => {
+    expect(withMediaCapabilityPrompt('第二轮', false, '/srv/ws')).toBe('第二轮')
   })
 })

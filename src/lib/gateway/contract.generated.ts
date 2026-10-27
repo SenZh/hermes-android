@@ -2683,8 +2683,6 @@ export interface PetScaleResult {
 export interface PromptSubmitParams {
   session_id: string
   profile?: string | null
-  /** Model-visible text; `text` is what the user sees. */
-  api_text?: string | null
   text?: unknown
   display_kind?: string | null
   interrupted?: boolean | null

@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { dismissToast, toast } from '@/components/ui/Dialogs'
 import { t } from '@/i18n'
 import { dropKnownRows, foldHistory, isToolError, type SessionMessageRow } from '@/lib/chat/history'
-import { withMediaCapabilityPrompt } from '@/lib/mediaPrompt'
+import { stripCapability, withMediaCapabilityPrompt } from '@/lib/mediaPrompt'
 import { resolveWorkspaceInfo } from '@/lib/workspacePath'
 import {
   localId,
@@ -971,8 +971,8 @@ async function sendTo(rid: string, text: string, mode: SendMode, opts: { display
   const prompt = composePrompt(text, attachments)
   if (!prompt) return
 
-  // 新会话首轮带上客户端能力说明：走 api_text（模型可见、用户不可见），
-  // 教会模型用 MEDIA:/abs/path 交付文件。后续轮次不重复注入。
+  // 新会话首轮把能力说明拼进文本，由渲染层 stripCapability 剥掉，用户看不到、模型能看到。
+  // 不能用 api_text：wire 契约 extra=forbid，传了会被直接拒绝。后续轮次不重复注入。
   const isFirstTurn = opts.editRowId == null && !s.messages.some((m) => m.role === 'user')
   let apiText = prompt
   if (isFirstTurn) {
@@ -999,7 +999,7 @@ async function sendTo(rid: string, text: string, mode: SendMode, opts: { display
   const user: ChatMessage = {
     id: localId('u'),
     role: 'user',
-    parts: [{ kind: 'text', text: opts.display ?? text.trim() }],
+    parts: [{ kind: 'text', text: stripCapability(opts.display ?? text.trim()) }],
     at: Date.now(),
     pending: 'sending',
     images: attachments.filter((a) => a.kind !== 'file').map((a) => a.previewUri ?? a.name),
@@ -1016,8 +1016,7 @@ async function sendTo(rid: string, text: string, mode: SendMode, opts: { display
   try {
     const res = await gw.request('prompt.submit', {
       session_id: rid,
-      text: prompt,
-      ...(isFirstTurn ? { api_text: apiText } : {}),
+      text: apiText,
       ...(opts.editRowId != null ? { truncate_before_row_id: opts.editRowId, confirm_truncate: true } : {}),
     })
     const status = res.status ?? 'streaming'

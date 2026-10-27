@@ -1,5 +1,24 @@
 # 更新日志 (Changelog)
 
+## [v1.8.3-preview.30] - 2026-10-27
+
+### 🛠 致命修复
+
+- **新会话发消息直接报错**：preview.29 传了 `api_text`，服务端契约 `PromptSubmitParams` 用 pydantic `extra=forbid`，字段表里没有它，直接拒绝：
+  `invalid params for prompt.submit: api_text: Extra inputs are not permitted`。
+  之前只看到 `session_cli_turn.py` 的 `_SUBMIT_FIELDS` 里有这个键，那是**进程内部**的 admission 字段，不经过 wire 校验——取证没闭环。
+- **改为拼接 + 渲染剥离**：首轮把能力说明接在用户文本后面，用 `\n\n<!--hermes-client-capability:v1-->\n` 分隔；
+  `textOf()` 是所有文本渲染的唯一入口，在那里对用户消息调用 `stripCapability()` 剥掉。
+  发送时的本地气泡和从服务端重新加载的历史都不会露出这段，模型仍能读到。
+- `PromptSubmitParams` 里错误的 `api_text` 字段已撤掉，与真实契约对齐。
+
+### 🧪 门禁
+
+- Test 31 重写：契约与客户端代码（剥掉注释后）都不得出现 `api_text`；必须有 `CAPABILITY_MARKER` 与 `stripCapability`；`textOf()` 必须对 user 消息剥离、且不得动 assistant 文本；首轮判断、真实 cwd 传递、提示词内容、无硬编码路径。
+- TC-MEDIA-12~15：拼接后可剥离回原文、无标记不误伤、剥离幂等、非首轮不带标记。
+- 变异验证：重新传 `api_text`、`textOf` 不剥离、首轮恒真 —— 三个都被拦住。
+
+
 ## [v1.8.3-preview.29] - 2026-10-27
 
 ### 🛠 修复

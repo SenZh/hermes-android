@@ -1,15 +1,28 @@
 /**
  * 客户端能力说明：让模型知道在这个 Android 客户端里怎么把文件交给用户。
  *
- * 走 `prompt.submit` 的 `api_text` 字段——存库的是 `text`（用户看到的），模型读到的是
- * `api_text`。因此这段说明不会出现在用户的聊天气泡里，但会留在会话历史中，
- * 后续轮次模型依然能看见。
+ * ## 为什么不走 api_text
  *
- * 只在会话的第一条用户消息上注入，避免每轮重复烧 token。
+ * gateway 的 `PromptSubmitParams`（`tui_gateway/contracts/prompt_voice.py`）用 pydantic
+ * `extra=forbid`，字段表里**没有** `api_text`；`session_cli_turn.py` 里的 `_SUBMIT_FIELDS`
+ * 是进程内部的 admission 字段，不经过 wire 校验。客户端传它会被 registry 拒掉：
+ * `invalid params for prompt.submit: api_text: Extra inputs are not permitted`。
  *
- * **不得硬编码任何路径前缀。** 工作区路径随部署变化，由调用方从服务端取真实值传进来；
- * 取不到时宁可让模型自己确认，也不能编一个看起来对的路径。
+ * ## 现在怎么做
+ *
+ * 拼进首轮的用户文本，用一段**明确的分隔标记**包住；客户端所有渲染入口先过
+ * `stripCapability()` 把它剥掉，所以用户看不到，而模型能读到。
+ *
+ * 代价：这段文字会进服务端历史、占首轮 token。只在首轮拼一次，可以接受。
+ *
+ * ## 路径
+ *
+ * **不得硬编码任何路径前缀。** 工作区随部署变化，由调用方从服务端取真实值传进来；
+ * 取不到就完全不给示例，让模型自己 pwd 确认。
  */
+
+/** 分隔标记。渲染层据此剥离，必须足够独特，不能出现在正常对话里。 */
+export const CAPABILITY_MARKER = '\n\n<!--hermes-client-capability:v1-->\n'
 
 export const MEDIA_CAPABILITY_PROMPT = `[客户端能力 · 仅模型可见，用户看不到这段]
 
@@ -28,11 +41,9 @@ MEDIA:/服务端绝对路径
 6. 不确定当前工作目录时，先执行 pwd 或 ls 确认，再拼路径——不要假设前缀。`
 
 /**
- * 组合出注入文本。
+ * 首轮把能力说明接到用户文本后面；后续轮次原样返回。
  *
- * @param text 用户原文
- * @param isFirstTurn 是否会话首轮
- * @param workspaceCwd 服务端返回的真实工作区绝对路径；为 null 时不提供示例路径
+ * @param workspaceCwd 服务端返回的真实工作区绝对路径；为 null 时不提供示例
  */
 export function withMediaCapabilityPrompt(
   text: string,
@@ -46,5 +57,15 @@ export function withMediaCapabilityPrompt(
     ? `\n\n示例（当前会话工作区是 ${workspaceCwd}）：\n已经生成好了。\nMEDIA:${workspaceCwd.replace(/\/+$/, '')}/reports/notes.md`
     : ''
 
-  return `${text}\n\n${MEDIA_CAPABILITY_PROMPT}${example}`
+  return `${text}${CAPABILITY_MARKER}${MEDIA_CAPABILITY_PROMPT}${example}`
+}
+
+/**
+ * 渲染前剥离能力说明。所有显示用户文本的地方都必须先过它，
+ * 否则发送时气泡正常、从服务端重新加载的历史里却会冒出这一大段。
+ */
+export function stripCapability(text: string): string {
+  const at = text.indexOf(CAPABILITY_MARKER)
+  if (at < 0) return text
+  return text.slice(0, at).trimEnd()
 }
