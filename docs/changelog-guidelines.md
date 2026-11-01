@@ -19,7 +19,7 @@
 每次正式发版必须按三层板块划分：
 
 ```markdown
-## [版本号] - YYYY-MM-DD
+## [vX.Y.Z] - YYYY-MM-DD
 
 简述统计：自上一正式版 vX.Y.Z 以来共计 N 个提交、M 个源码文件变更（+Insertions / −Deletions 行）。
 
@@ -39,6 +39,8 @@
 ### 线上入口 / 构建产物
 - Release 页面、安装包直链及校验信息
 ```
+
+> **头部格式硬性约束**：条目头部必须写作 `## [vX.Y.Z] - YYYY-MM-DD`（方括号内版本号带 `v` 前缀，preview 版本同理，如 `## [v1.8.3-preview.31]`）。该格式由 `scripts/verify-fixes.mjs` Test 29 以正则 `/## \[v([^\]]+)\]/` 强制校验，缺少 `v` 前缀会导致断言跳过首条、回退匹配旧条目，`npm test` 与 CI `check` job 失败。
 
 ---
 
