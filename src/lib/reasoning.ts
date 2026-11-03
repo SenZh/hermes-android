@@ -93,3 +93,18 @@ export function effortsFor(provider: string | null | undefined, model: string | 
   const canDisable = off && !NEVER_OFF.has(slug) && caps?.can_disable_reasoning !== false
   return canDisable ? ['none', ...efforts] : efforts
 }
+
+/** Localized label for a reasoning effort; unknown values pass through unchanged. */
+export function effortLabel(effort: string | null | undefined, t: (key: string) => string): string {
+  if (!effort) return t('default')
+  const labels: Record<string, string> = {
+    none: t('Off'),
+    minimal: t('Minimal'),
+    low: t('Low'),
+    medium: t('Medium'),
+    high: t('High'),
+    xhigh: t('Extra high'),
+    max: t('Max'),
+  }
+  return labels[effort] ?? effort
+}

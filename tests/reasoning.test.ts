@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { effortsFor } from '@/lib/reasoning'
+import { zh } from '@/i18n/zh'
+import { effortLabel, effortsFor } from '@/lib/reasoning'
 
 describe('effortsFor', () => {
   it('returns no levels when the model cannot reason', () => {
@@ -28,5 +29,24 @@ describe('effortsFor', () => {
 
   it('uses the gpt-6 level set', () => {
     expect(effortsFor('openai-codex', 'gpt-6-astra')).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+  })
+})
+
+describe('effortLabel', () => {
+  const translate = (key: string) => zh[key] ?? key
+
+  it('maps every effort through the real zh catalog', () => {
+    expect(effortLabel('none', translate)).toBe(zh['Off'])
+    expect(effortLabel('minimal', translate)).toBe(zh['Minimal'])
+    expect(effortLabel('low', translate)).toBe(zh['Low'])
+    expect(effortLabel('medium', translate)).toBe(zh['Medium'])
+    expect(effortLabel('high', translate)).toBe(zh['High'])
+    expect(effortLabel('xhigh', translate)).toBe(zh['Extra high'])
+    expect(effortLabel('max', translate)).toBe(zh['Max'])
+    expect(effortLabel(null, translate)).toBe(zh['default'])
+  })
+
+  it('passes unknown levels through unchanged', () => {
+    expect(effortLabel('weird', translate)).toBe('weird')
   })
 })

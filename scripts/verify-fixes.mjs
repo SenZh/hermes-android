@@ -38,56 +38,31 @@ function testPathSecurityGuard() {
   console.log(' -> PASSED: Path normalization is delegated, and unit-tested for real.\n')
 }
 
-// 3. 测试 Android Inverted FlatList 下选择性禁用 selectable 逻辑
-function testSelectablePlatformLogic() {
-  console.log('[Test 3] Testing Selectable Platform Guard...')
+// 3. (removed) The old suite declared a local getSelectableOption and asserted that local copy.
+// There is no production counterpart left (the selectable platform guard is gone from the UI),
+// so it asserted nothing about the app. UI review covers the remaining behavior.
 
-  function getSelectableOption(platform) {
-    return platform !== 'android'
-  }
-
-  assert.equal(getSelectableOption('android'), false, 'On Android, selectable MUST be false to prevent Inverted FlatList jump')
-  assert.equal(getSelectableOption('ios'), true, 'On iOS, selectable remains true')
-  assert.equal(getSelectableOption('web'), true, 'On Web, selectable remains true')
-
-  console.log(' -> PASSED: Android Inverted jump root-cause neutralized.\n')
-}
-
-// 4. 测试思考等级文案汉化映射
+// 4. 思考等级文案接线（映射本身由 tests/reasoning.test.ts 真实 import 覆盖）
 function testReasoningEffortI18n() {
-  console.log('[Test 4] Testing Reasoning Effort i18n mapping...')
+  console.log('[Test 4] Testing Reasoning Effort label wiring...')
+  const chat = fs.readFileSync(path.resolve('src/app/(tabs)/chat.tsx'), 'utf-8')
+  const sheet = fs.readFileSync(path.resolve('src/components/chat/ReasoningSheet.tsx'), 'utf-8')
 
-  const zhDict = {
-    Off: '关闭',
-    Minimal: '极简',
-    Low: '低',
-    Medium: '中',
-    High: '高',
-    'Extra high': '超高',
-    Max: '最大',
-    default: '默认',
-  }
+  assert.ok(
+    chat.includes('effortLabel as formatEffort') && chat.includes('@/lib/reasoning'),
+    'chat.tsx must use the shared effortLabel from src/lib/reasoning.ts',
+  )
+  assert.ok(
+    sheet.includes('effortLabel') && sheet.includes('@/lib/reasoning'),
+    'ReasoningSheet must use the shared effortLabel from src/lib/reasoning.ts',
+  )
+  assert.ok(!chat.includes('effortLabels'), 'the duplicate effort label map must not return to chat.tsx')
+  assert.ok(
+    !sheet.includes('const labels: Record<Effort, string>'),
+    'the duplicate effort label map must not return to ReasoningSheet.tsx',
+  )
 
-  function getEffortLabel(effort) {
-    const map = {
-      none: zhDict.Off,
-      minimal: zhDict.Minimal,
-      low: zhDict.Low,
-      medium: zhDict.Medium,
-      high: zhDict.High,
-      xhigh: zhDict['Extra high'],
-      max: zhDict.Max,
-    }
-    return effort ? (map[effort] ?? effort) : zhDict.default
-  }
-
-  assert.equal(getEffortLabel('medium'), '中', 'medium must map to 中')
-  assert.equal(getEffortLabel('low'), '低', 'low must map to 低')
-  assert.equal(getEffortLabel('high'), '高', 'high must map to 高')
-  assert.equal(getEffortLabel('none'), '关闭', 'none must map to 关闭')
-  assert.equal(getEffortLabel(undefined), '默认', 'undefined must map to 默认')
-
-  console.log(' -> PASSED: Reasoning effort labels strictly localized.\n')
+  console.log(' -> PASSED: both screens use the shared effortLabel; the real mapping is unit-tested.\n')
 }
 
 // 5. 测试审批模式状态轮转与图标配置
@@ -1067,7 +1042,6 @@ function runAll() {
   console.log('=== RUNNING HERMES ANDROID VERIFICATION TEST SUITE ===\n')
   testProviderFilter()
   testPathSecurityGuard()
-  testSelectablePlatformLogic()
   testReasoningEffortI18n()
   testApprovalModeCycling()
   testSmartApprovalStyle()
@@ -1094,7 +1068,7 @@ function runAll() {
   testGestureRobustness()
   testVersionSourceOfTruth()
   testWorkletSelfContained()
-  console.log('=== ALL 29 SUITES PASSED (0 ERRORS) ===')
+  console.log('=== ALL 28 SUITES PASSED (0 ERRORS) ===')
 }
 
 runAll()

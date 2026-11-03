@@ -48,6 +48,7 @@ import { textOf } from '@/lib/chat/types'
 import { relativeTime } from '@/lib/format'
 import { useRest, useRpc } from '@/lib/hooks'
 import { rpc, useProfile, useRuntime } from '@/lib/hermes'
+import { effortLabel as formatEffort } from '@/lib/reasoning'
 import {
   addSystemMessage,
   attachFile,
@@ -574,16 +575,7 @@ function ComposerPills({ onModel, onReasoning, onMenu }: { onModel: () => void; 
   const live = !!runtimeId
   const fallback = useRest<{ model?: string }>(['model-info'], '/api/model/info', undefined, { enabled: !live })
 
-  const effortLabels: Record<string, string> = {
-    none: t('Off'),
-    minimal: t('Minimal'),
-    low: t('Low'),
-    medium: t('Medium'),
-    high: t('High'),
-    xhigh: t('Extra high'),
-    max: t('Max'),
-  }
-  const effortLabel = effort ? (effortLabels[effort] ?? effort) : t('default')
+  const effortLabel = formatEffort(effort, t)
 
   async function cycleApprovalMode() {
     if (!runtimeId) return
